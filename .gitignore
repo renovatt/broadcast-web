@@ -30,3 +30,6 @@ npm-debug.log*
 .DS_Store
 *.suo
 *.sw?
+
+# Ferramentas locais (JDK portátil para os emuladores)
+.tools/

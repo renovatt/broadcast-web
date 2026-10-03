@@ -1,11 +1,146 @@
 rules_version = '2';
 
-// Placeholder da Fase 1: nega tudo.
-// As regras de isolamento multi-tenant são escritas na Fase 2.
+// Isolamento multi-tenant
+// -----------------------
+// Todas as coleções ficam na raiz (sem subcoleções) e cada documento carrega `tenantId`,
+// que é o uid do cliente dono. Um cliente só lê/escreve documentos com o seu próprio tenantId.
+// `tenantId` e `connectionId` são imutáveis; contatos e mensagens só podem apontar para
+// conexões do mesmo cliente. Timestamps são sempre do servidor (request.time).
+// A Cloud Function de agendamento usa o Admin SDK, que não passa por estas regras.
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    // ---------- Helpers ----------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(data) {
+      return isSignedIn() && data.tenantId == request.auth.uid;
+    }
+
+    function ownsConnection(connectionId) {
+      let path = /databases/$(database)/documents/connections/$(connectionId);
+      return connectionId is string
+        && exists(path)
+        && get(path).data.tenantId == request.auth.uid;
+    }
+
+    function isText(value, maxLength) {
+      return value is string && value.trim().size() > 0 && value.size() <= maxLength;
+    }
+
+    function changedOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    function isCreatedNow(data) {
+      return data.createdAt == request.time && data.updatedAt == request.time;
+    }
+
+    // ---------- Conexões ----------
+
+    match /connections/{connectionId} {
+      function isValidConnection(data) {
+        return isText(data.name, 80);
+      }
+
+      allow read, delete: if isOwner(resource.data);
+
+      allow create: if isOwner(request.resource.data)
+        && request.resource.data.keys().hasOnly(['tenantId', 'name', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['tenantId', 'name', 'createdAt', 'updatedAt'])
+        && isCreatedNow(request.resource.data)
+        && isValidConnection(request.resource.data);
+
+      allow update: if isOwner(resource.data)
+        && changedOnly(['name', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && isValidConnection(request.resource.data);
+    }
+
+    // ---------- Contatos ----------
+
+    match /contacts/{contactId} {
+      function isValidContact(data) {
+        return isText(data.name, 80)
+          && data.phone is string
+          && data.phone.matches('^[+][1-9][0-9]{7,14}$');
+      }
+
+      allow read, delete: if isOwner(resource.data);
+
+      allow create: if isOwner(request.resource.data)
+        && request.resource.data.keys().hasOnly(['tenantId', 'connectionId', 'name', 'phone', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['tenantId', 'connectionId', 'name', 'phone', 'createdAt', 'updatedAt'])
+        && ownsConnection(request.resource.data.connectionId)
+        && isCreatedNow(request.resource.data)
+        && isValidContact(request.resource.data);
+
+      allow update: if isOwner(resource.data)
+        && changedOnly(['name', 'phone', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && isValidContact(request.resource.data);
+    }
+
+    // ---------- Mensagens ----------
+
+    match /messages/{messageId} {
+      function isValidContent(data) {
+        return isText(data.body, 1000)
+          && data.recipientIds is list
+          && data.recipientIds.size() > 0
+          && data.recipientIds.size() <= 500
+          && data.recipients is list
+          && data.recipients.size() == data.recipientIds.size();
+      }
+
+      // Envio imediato: status "sent" com horário do servidor.
+      function isSendNow(data) {
+        return data.status == 'sent'
+          && data.sentAt == request.time
+          && data.scheduledAt == null;
+      }
+
+      // Agendamento: status "scheduled" para um horário futuro (até 1 ano).
+      function isSchedule(data) {
+        return data.status == 'scheduled'
+          && data.scheduledAt is timestamp
+          && data.scheduledAt > request.time
+          && data.scheduledAt < request.time + duration.value(365, 'd')
+          && data.sentAt == null;
+      }
+
+      function isValidDispatch(data) {
+        return isSendNow(data) || isSchedule(data);
+      }
+
+      allow read, delete: if isOwner(resource.data);
+
+      allow create: if isOwner(request.resource.data)
+        && request.resource.data.keys().hasOnly([
+          'tenantId', 'connectionId', 'body', 'recipientIds', 'recipients',
+          'status', 'scheduledAt', 'sentAt', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'tenantId', 'connectionId', 'body', 'recipientIds', 'recipients',
+          'status', 'scheduledAt', 'sentAt', 'createdAt', 'updatedAt'
+        ])
+        && ownsConnection(request.resource.data.connectionId)
+        && isCreatedNow(request.resource.data)
+        && isValidContent(request.resource.data)
+        && isValidDispatch(request.resource.data);
+
+      // Só mensagens agendadas podem ser editadas: reagendar, alterar conteúdo ou "enviar agora".
+      // Mensagens enviadas são histórico (apenas exclusão).
+      allow update: if isOwner(resource.data)
+        && resource.data.status == 'scheduled'
+        && changedOnly(['body', 'recipientIds', 'recipients', 'status', 'scheduledAt', 'sentAt', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && isValidContent(request.resource.data)
+        && isValidDispatch(request.resource.data);
     }
   }
 }
