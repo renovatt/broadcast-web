@@ -1,5 +1,5 @@
 import type { Timestamp } from 'firebase/firestore';
-import type { Contact } from '../contacts/types';
+import type { Contact } from '@/features/contacts/types/contact';
 
 export type MessageStatus = 'scheduled' | 'sent';
 

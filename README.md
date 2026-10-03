@@ -12,6 +12,38 @@ Aplicação SaaS multi-tenant de envio (simulado) de mensagens em massa — Reac
 firebase.json, firestore.rules, firestore.indexes.json
 ```
 
+### Organização do frontend (`web/src`)
+
+```
+app/            bootstrap: providers, tema, rotas e guards
+components/     componentes globais reutilizáveis
+  rhf/          campos de formulário ligados ao react-hook-form (RhfTextField, RhfPasswordField)
+shared/         funções e hooks compartilhados (sem componentes)
+lib/            inicialização de serviços (Firebase)
+features/<nome>/
+  _components/  componentes exclusivos da feature
+  api/          acesso ao Firebase (funções puras)
+  stores/       estado global da feature (Zustand)
+  hooks/  schemas/  types/  utils/
+  pages/        telas ligadas às rotas
+  __tests__/    testes de tudo que a feature implementa
+```
+
+Convenções (verificadas pelo ESLint com `eslint-plugin-check-file`):
+
+- arquivos e pastas em `kebab-case` (pastas privadas de feature com `_`, ex.: `_components`);
+- nenhum arquivo solto na raiz de uma feature;
+- `shared/` não aceita componentes (`.tsx`);
+- paradigma funcional: `class` é proibido; imports internos com o alias `@/` → `web/src`;
+- estado global com **Zustand** (sem React Context);
+- cada módulo tem sua pasta `__tests__` (Vitest + Testing Library + jsdom). Nenhum teste de unidade
+  acessa o Firebase: `@/lib/firebase` é substituído por um stub e o SDK é mockado por teste.
+
+### Git hooks (Husky)
+
+- **pre-commit**: ESLint `--fix` + Prettier nos arquivos staged (lint-staged), typecheck completo e testes de unidade.
+- **pre-push**: build de `/web` e `/functions` e testes das Security Rules.
+
 ## Pré-requisitos
 
 - Node.js 24
@@ -30,6 +62,13 @@ npm run emulators                    # Auth, Firestore, Functions e Hosting loca
 ```
 
 Para usar o frontend contra os emuladores, defina `VITE_USE_EMULATORS=true` no `web/.env.local`.
+
+## Autenticação
+
+Firebase Authentication com **e-mail/senha** e **Google** (popup). Cada usuário autenticado é um
+cliente (tenant): seu `uid` é o `tenantId` de todos os seus dados. No primeiro login com Google a
+conta é criada automaticamente. Ambos os provedores precisam estar ativos em
+_Authentication → Método de login_ no console do Firebase.
 
 ## Modelagem de dados
 
@@ -59,6 +98,7 @@ Os cenários de acesso cruzado são cobertos por testes automatizados: `npm run 
 | -------------------- | ---------------------------------------------------- |
 | `npm run dev`        | Vite dev server do `/web`                            |
 | `npm run emulators`  | Compila as functions e sobe os emuladores            |
+| `npm test`           | Testes de unidade do `/web`                          |
 | `npm run test:rules` | Testes das Security Rules no emulador do Firestore   |
 | `npm run setup:jdk`  | Baixa o JDK 21 portátil usado pelos emuladores       |
 | `npm run build`      | Build de `/web` e `/functions`                       |
