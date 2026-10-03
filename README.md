@@ -11,10 +11,17 @@ Cada usuário cadastrado é um **cliente**. O cliente gerencia suas **conexões*
 seus **contatos** e suas **mensagens**. Mensagens podem ser enviadas na hora ou **agendadas** — no
 horário, uma Cloud Function as marca como enviadas, **mesmo com o app fechado**.
 
+## Demonstração
+
+<video src="web/public/assets/broadcast-demo.mp4" controls muted width="100%"></video>
+
+▶️ [Assistir à demonstração](web/public/assets/broadcast-demo.mp4)
+
 ---
 
 ## Sumário
 
+- [Demonstração](#demonstração)
 - [Funcionalidades](#funcionalidades)
 - [Stack](#stack)
 - [Arquitetura](#arquitetura)
