@@ -39,11 +39,25 @@ const inHours = (hours: number) => Timestamp.fromMillis(Date.now() + hours * HOU
 
 const recipient = { id: 'alice-contact', name: 'Maria', phone: '+5511999998888' };
 
+/** Campos de ciclo de vida que todo documento novo precisa ter (soft delete + timestamps). */
+const lifecycle = () => ({
+  enabled: true,
+  deletedAt: null,
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+});
+
+/** Payload de "exclusão" (soft delete). */
+const softDelete = () => ({
+  enabled: false,
+  deletedAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+});
+
 const newConnection = (tenantId: string, overrides: DocumentData = {}) => ({
   tenantId,
   name: 'WhatsApp Vendas',
-  createdAt: serverTimestamp(),
-  updatedAt: serverTimestamp(),
+  ...lifecycle(),
   ...overrides,
 });
 
@@ -52,8 +66,7 @@ const newContact = (tenantId: string, connectionId: string, overrides: DocumentD
   connectionId,
   name: 'Maria',
   phone: '+5511999998888',
-  createdAt: serverTimestamp(),
-  updatedAt: serverTimestamp(),
+  ...lifecycle(),
   ...overrides,
 });
 
@@ -66,8 +79,7 @@ const newMessage = (tenantId: string, connectionId: string, overrides: DocumentD
   status: 'sent',
   scheduledAt: null,
   sentAt: serverTimestamp(),
-  createdAt: serverTimestamp(),
-  updatedAt: serverTimestamp(),
+  ...lifecycle(),
   ...overrides,
 });
 
@@ -77,15 +89,42 @@ const scheduledOverrides = (hours: number) => ({
   sentAt: null,
 });
 
-/** Dados iniciais gravados sem passar pelas regras: Alice e Bob com uma conexão, um contato e mensagens cada. */
+/**
+ * Dados iniciais gravados sem passar pelas regras: Alice e Bob com uma conexão, um contato e
+ * mensagens cada; Alice também tem uma conexão, um contato e uma mensagem já desativados.
+ */
 const seed = () =>
   testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore() as unknown as Firestore;
     const now = Timestamp.now();
-    const base = { createdAt: now, updatedAt: now };
+    const base = { enabled: true, deletedAt: null, createdAt: now, updatedAt: now };
+    const disabled = { ...base, enabled: false, deletedAt: now };
 
     await setDoc(doc(db, 'connections/alice-conn'), { tenantId: ALICE, name: 'Alice', ...base });
     await setDoc(doc(db, 'connections/bob-conn'), { tenantId: BOB, name: 'Bob', ...base });
+    await setDoc(doc(db, 'connections/alice-disabled-conn'), {
+      tenantId: ALICE,
+      name: 'Antiga',
+      ...disabled,
+    });
+    await setDoc(doc(db, 'contacts/alice-disabled-contact'), {
+      tenantId: ALICE,
+      connectionId: 'alice-conn',
+      name: 'Ex-contato',
+      phone: '+5511900000000',
+      ...disabled,
+    });
+    await setDoc(doc(db, 'messages/alice-disabled-message'), {
+      tenantId: ALICE,
+      connectionId: 'alice-conn',
+      body: 'Excluída',
+      recipientIds: [recipient.id],
+      recipients: [recipient],
+      status: 'scheduled',
+      scheduledAt: inHours(2),
+      sentAt: null,
+      ...disabled,
+    });
 
     await setDoc(doc(db, 'contacts/alice-contact'), {
       tenantId: ALICE,
@@ -226,8 +265,8 @@ describe('connections', () => {
     await assertFails(deleteDoc(doc(db, 'connections/bob-conn')));
   });
 
-  it('dono exclui a própria conexão', async () => {
-    await assertSucceeds(deleteDoc(doc(dbAs(ALICE), 'connections/alice-conn')));
+  it('dono "exclui" a própria conexão via soft delete', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs(ALICE), 'connections/alice-conn'), softDelete()));
   });
 });
 
@@ -441,9 +480,100 @@ describe('messages', () => {
     await assertFails(deleteDoc(doc(db, 'messages/bob-scheduled')));
   });
 
-  it('dono exclui mensagens enviadas e agendadas', async () => {
+  it('dono "exclui" mensagens enviadas e agendadas via soft delete', async () => {
     const db = dbAs(ALICE);
-    await assertSucceeds(deleteDoc(doc(db, 'messages/alice-sent')));
-    await assertSucceeds(deleteDoc(doc(db, 'messages/alice-scheduled')));
+    await assertSucceeds(updateDoc(doc(db, 'messages/alice-sent'), softDelete()));
+    await assertSucceeds(updateDoc(doc(db, 'messages/alice-scheduled'), softDelete()));
+  });
+});
+
+describe('soft delete', () => {
+  it('ninguém apaga documentos de verdade, nem o dono', async () => {
+    const db = dbAs(ALICE);
+    await assertFails(deleteDoc(doc(db, 'connections/alice-conn')));
+    await assertFails(deleteDoc(doc(db, 'contacts/alice-contact')));
+    await assertFails(deleteDoc(doc(db, 'messages/alice-sent')));
+  });
+
+  it('documento precisa nascer ativo (enabled true, deletedAt null)', async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, 'connections/a'), newConnection(ALICE, { enabled: false })));
+    await assertFails(
+      setDoc(doc(db, 'connections/b'), newConnection(ALICE, { deletedAt: Timestamp.now() })),
+    );
+    const { enabled: _enabled, ...withoutEnabled } = newConnection(ALICE);
+    await assertFails(setDoc(doc(db, 'connections/c'), withoutEnabled));
+    await assertFails(
+      setDoc(doc(db, 'contacts/d'), newContact(ALICE, 'alice-conn', { enabled: false })),
+    );
+    await assertFails(
+      setDoc(doc(db, 'messages/e'), newMessage(ALICE, 'alice-conn', { enabled: false })),
+    );
+  });
+
+  it('o soft delete exige deletedAt e updatedAt do servidor', async () => {
+    const ref = doc(dbAs(ALICE), 'contacts/alice-contact');
+    await assertFails(updateDoc(ref, { enabled: false, updatedAt: serverTimestamp() }));
+    await assertFails(
+      updateDoc(ref, { ...softDelete(), deletedAt: Timestamp.fromMillis(Date.now() - HOUR) }),
+    );
+    await assertSucceeds(updateDoc(ref, softDelete()));
+  });
+
+  it('o soft delete não pode alterar outros campos junto', async () => {
+    const ref = doc(dbAs(ALICE), 'contacts/alice-contact');
+    await assertFails(updateDoc(ref, { ...softDelete(), name: 'Outro nome' }));
+    await assertFails(updateDoc(ref, { ...softDelete(), tenantId: BOB }));
+  });
+
+  it('não exclui (soft) documentos de outro cliente', async () => {
+    const db = dbAs(ALICE);
+    await assertFails(updateDoc(doc(db, 'connections/bob-conn'), softDelete()));
+    await assertFails(updateDoc(doc(db, 'contacts/bob-contact'), softDelete()));
+    await assertFails(updateDoc(doc(db, 'messages/bob-scheduled'), softDelete()));
+  });
+
+  it('documento desativado não pode ser editado, reativado nem "excluído" de novo', async () => {
+    const db = dbAs(ALICE);
+    const now = { updatedAt: serverTimestamp() };
+    await assertFails(updateDoc(doc(db, 'connections/alice-disabled-conn'), { name: 'X', ...now }));
+    await assertFails(
+      updateDoc(doc(db, 'connections/alice-disabled-conn'), {
+        enabled: true,
+        deletedAt: null,
+        ...now,
+      }),
+    );
+    await assertFails(updateDoc(doc(db, 'connections/alice-disabled-conn'), softDelete()));
+    await assertFails(
+      updateDoc(doc(db, 'contacts/alice-disabled-contact'), { name: 'Volta', ...now }),
+    );
+    await assertFails(
+      updateDoc(doc(db, 'messages/alice-disabled-message'), { body: 'Volta', ...now }),
+    );
+  });
+
+  it('não cria contato nem mensagem em conexão desativada', async () => {
+    const db = dbAs(ALICE);
+    await assertFails(setDoc(doc(db, 'contacts/new'), newContact(ALICE, 'alice-disabled-conn')));
+    await assertFails(setDoc(doc(db, 'messages/new'), newMessage(ALICE, 'alice-disabled-conn')));
+  });
+
+  it('dono ainda lê os próprios documentos desativados (base para uma futura lixeira)', async () => {
+    const db = dbAs(ALICE);
+    await assertSucceeds(getDoc(doc(db, 'connections/alice-disabled-conn')));
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(db, 'contacts'),
+          where('tenantId', '==', ALICE),
+          where('enabled', '==', false),
+        ),
+      ),
+    );
+  });
+
+  it('outro cliente não lê documentos desativados de terceiros', async () => {
+    await assertFails(getDoc(doc(dbAs(BOB), 'connections/alice-disabled-conn')));
   });
 });

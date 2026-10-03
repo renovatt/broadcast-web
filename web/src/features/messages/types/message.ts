@@ -1,5 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { Contact } from '@/features/contacts/types/contact';
+import type { DocumentLifecycle } from '@/shared/types/document-lifecycle';
 
 export type MessageStatus = 'scheduled' | 'sent';
 
@@ -7,7 +8,7 @@ export type MessageStatus = 'scheduled' | 'sent';
 export type Recipient = Pick<Contact, 'id' | 'name' | 'phone'>;
 
 /** Coleção raiz `messages`. Ligada a uma conexão por `connectionId` (sem subcoleções). */
-export type Message = {
+export type Message = DocumentLifecycle & {
   id: string;
   tenantId: string;
   connectionId: string;
@@ -19,8 +20,6 @@ export type Message = {
   scheduledAt: Timestamp | null;
   /** Preenchido quando a mensagem é enviada (na hora ou pela Cloud Function). */
   sentAt: Timestamp | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
 };
 
 export type MessageInput = {

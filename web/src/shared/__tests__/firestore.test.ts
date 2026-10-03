@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FirebaseError } from 'firebase/app';
 import type { DocumentSnapshot } from 'firebase/firestore';
-import { fromSnapshot, getFirestoreErrorMessage } from '../utils/firestore';
+import {
+  fromSnapshot,
+  getFirestoreErrorMessage,
+  newDocumentFields,
+  onlyActive,
+  softDeleteFields,
+} from '../utils/firestore';
+
+vi.mock('firebase/firestore', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('firebase/firestore')>()),
+  serverTimestamp: () => 'SERVER_TIMESTAMP',
+  where: (field: string, op: string, value: unknown) => ({ where: [field, op, value] }),
+}));
 
 describe('fromSnapshot', () => {
   it('junta o id do documento aos dados, estimando timestamps pendentes', () => {
@@ -30,5 +42,28 @@ describe('getFirestoreErrorMessage', () => {
     const generic = 'Não foi possível concluir. Tente novamente.';
     expect(getFirestoreErrorMessage(new FirebaseError('internal', 'x'))).toBe(generic);
     expect(getFirestoreErrorMessage(new Error('x'))).toBe(generic);
+  });
+});
+
+describe('soft delete', () => {
+  it('newDocumentFields: documento nasce ativo, sem exclusão e com timestamps do servidor', () => {
+    expect(newDocumentFields()).toEqual({
+      enabled: true,
+      deletedAt: null,
+      createdAt: 'SERVER_TIMESTAMP',
+      updatedAt: 'SERVER_TIMESTAMP',
+    });
+  });
+
+  it('softDeleteFields: desativa e registra quando', () => {
+    expect(softDeleteFields()).toEqual({
+      enabled: false,
+      deletedAt: 'SERVER_TIMESTAMP',
+      updatedAt: 'SERVER_TIMESTAMP',
+    });
+  });
+
+  it('onlyActive: filtra enabled == true', () => {
+    expect(onlyActive()).toEqual({ where: ['enabled', '==', true] });
   });
 });

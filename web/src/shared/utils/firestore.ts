@@ -1,5 +1,5 @@
 import { FirebaseError } from 'firebase/app';
-import type { DocumentSnapshot } from 'firebase/firestore';
+import { serverTimestamp, where, type DocumentSnapshot } from 'firebase/firestore';
 
 /**
  * Converte um documento em objeto do domínio com `id`.
@@ -8,6 +8,24 @@ import type { DocumentSnapshot } from 'firebase/firestore';
  */
 export const fromSnapshot = <T extends { id: string }>(snapshot: DocumentSnapshot): T =>
   ({ id: snapshot.id, ...snapshot.data({ serverTimestamps: 'estimate' }) }) as T;
+
+/** Campos de todo documento novo: ativo, sem exclusão e com timestamps do servidor. */
+export const newDocumentFields = () => ({
+  enabled: true,
+  deletedAt: null,
+  createdAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+});
+
+/** "Excluir" = desativar (soft delete). As rules proíbem apagar documentos de verdade. */
+export const softDeleteFields = () => ({
+  enabled: false,
+  deletedAt: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+});
+
+/** Filtro de toda consulta do app: somente documentos ativos. */
+export const onlyActive = () => where('enabled', '==', true);
 
 const FIRESTORE_ERROR_MESSAGES: Record<string, string> = {
   'permission-denied': 'Você não tem permissão para acessar estes dados.',

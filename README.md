@@ -74,23 +74,37 @@ _Authentication → Método de login_ no console do Firebase.
 
 Três coleções na raiz — **sem subcoleções** — relacionadas por ID. Todo documento carrega `tenantId` (uid do cliente dono).
 
-| Coleção       | Campos                                                                                                                                   |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `connections` | `tenantId`, `name`, `createdAt`, `updatedAt`                                                                                             |
-| `contacts`    | `tenantId`, `connectionId`, `name`, `phone` (E.164), `createdAt`, `updatedAt`                                                            |
-| `messages`    | `tenantId`, `connectionId`, `body`, `recipientIds`, `recipients` (snapshot), `status`, `scheduledAt`, `sentAt`, `createdAt`, `updatedAt` |
+| Coleção       | Campos próprios                                                                                                |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| `connections` | `tenantId`, `name`                                                                                             |
+| `contacts`    | `tenantId`, `connectionId`, `name`, `phone` (E.164)                                                            |
+| `messages`    | `tenantId`, `connectionId`, `body`, `recipientIds`, `recipients` (snapshot), `status`, `scheduledAt`, `sentAt` |
+
+Todas também têm os campos de ciclo de vida: `enabled`, `deletedAt`, `createdAt`, `updatedAt`.
+
+## Soft delete
+
+Nada é apagado de verdade. Todo documento nasce com `enabled: true` e `deletedAt: null`;
+"excluir" desativa o documento (`enabled: false`, `deletedAt` = horário do servidor).
+
+- Toda consulta do app filtra `where('enabled', '==', true)`; os índices compostos incluem `enabled`.
+- As rules proíbem `delete` e só permitem a transição `enabled: true → false` (sem alterar outros
+  campos). Documentos desativados não podem ser editados nem reativados pelo cliente.
+- Não é possível criar contatos ou mensagens em uma conexão desativada.
+- O dono ainda pode ler os próprios documentos desativados (base para uma futura lixeira).
 
 ## Isolamento entre clientes
 
 Garantido pelas [Security Rules](./firestore.rules):
 
-- leitura, edição e exclusão só quando `resource.data.tenantId == request.auth.uid`;
-- criação só com o próprio `tenantId` e apontando para uma conexão do mesmo cliente;
+- leitura e escrita só quando `resource.data.tenantId == request.auth.uid`;
+- criação só com o próprio `tenantId` e apontando para uma conexão ativa do mesmo cliente;
 - `tenantId` e `connectionId` são imutáveis; campos permitidos e tamanhos são validados;
 - timestamps sempre do servidor; mensagens agendadas só no futuro; mensagens enviadas não são editáveis.
 
 Como regras não funcionam como filtro, toda query do app inclui `where('tenantId', '==', uid)`.
-Os cenários de acesso cruzado são cobertos por testes automatizados: `npm run test:rules`.
+Os cenários de acesso cruzado e de soft delete são cobertos por testes automatizados:
+`npm run test:rules`.
 
 ## Scripts (raiz)
 

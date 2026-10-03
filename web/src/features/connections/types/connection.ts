@@ -1,12 +1,10 @@
-import type { Timestamp } from 'firebase/firestore';
+import type { DocumentLifecycle } from '@/shared/types/document-lifecycle';
 
 /** Coleção raiz `connections`. Pertence a um cliente (tenant). */
-export type Connection = {
+export type Connection = DocumentLifecycle & {
   id: string;
   tenantId: string;
   name: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
 };
 
 export type ConnectionInput = Pick<Connection, 'name'>;

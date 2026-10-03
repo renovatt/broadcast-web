@@ -5,8 +5,16 @@ rules_version = '2';
 // Todas as coleções ficam na raiz (sem subcoleções) e cada documento carrega `tenantId`,
 // que é o uid do cliente dono. Um cliente só lê/escreve documentos com o seu próprio tenantId.
 // `tenantId` e `connectionId` são imutáveis; contatos e mensagens só podem apontar para
-// conexões do mesmo cliente. Timestamps são sempre do servidor (request.time).
-// A Cloud Function de agendamento usa o Admin SDK, que não passa por estas regras.
+// conexões ativas do mesmo cliente. Timestamps são sempre do servidor (request.time).
+//
+// Soft delete
+// -----------
+// Nada é apagado de verdade (`allow delete: if false`). Todo documento nasce com
+// `enabled: true` e `deletedAt: null`; "excluir" é um update que só pode mudar
+// `enabled: true → false` e `deletedAt`/`updatedAt` para o horário do servidor.
+// Documentos desativados não podem mais ser editados nem reativados pelo cliente.
+//
+// A Cloud Function de agendamento/cascata usa o Admin SDK, que não passa por estas regras.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -21,11 +29,12 @@ service cloud.firestore {
       return isSignedIn() && data.tenantId == request.auth.uid;
     }
 
-    function ownsConnection(connectionId) {
+    function ownsActiveConnection(connectionId) {
       let path = /databases/$(database)/documents/connections/$(connectionId);
       return connectionId is string
         && exists(path)
-        && get(path).data.tenantId == request.auth.uid;
+        && get(path).data.tenantId == request.auth.uid
+        && get(path).data.enabled == true;
     }
 
     function isText(value, maxLength) {
@@ -40,6 +49,23 @@ service cloud.firestore {
       return data.createdAt == request.time && data.updatedAt == request.time;
     }
 
+    function isCreatedActive(data) {
+      return data.enabled == true && data.deletedAt == null;
+    }
+
+    function isActive(data) {
+      return data.enabled == true;
+    }
+
+    /** "Excluir": desativa o documento, sem tocar em nenhum outro campo. */
+    function isSoftDelete() {
+      return resource.data.enabled == true
+        && request.resource.data.enabled == false
+        && request.resource.data.deletedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && changedOnly(['enabled', 'deletedAt', 'updatedAt']);
+    }
+
     // ---------- Conexões ----------
 
     match /connections/{connectionId} {
@@ -47,18 +73,25 @@ service cloud.firestore {
         return isText(data.name, 80);
       }
 
-      allow read, delete: if isOwner(resource.data);
+      allow read: if isOwner(resource.data);
+      allow delete: if false;
 
       allow create: if isOwner(request.resource.data)
-        && request.resource.data.keys().hasOnly(['tenantId', 'name', 'createdAt', 'updatedAt'])
-        && request.resource.data.keys().hasAll(['tenantId', 'name', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['tenantId', 'name', 'enabled', 'deletedAt', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['tenantId', 'name', 'enabled', 'deletedAt', 'createdAt', 'updatedAt'])
         && isCreatedNow(request.resource.data)
+        && isCreatedActive(request.resource.data)
         && isValidConnection(request.resource.data);
 
-      allow update: if isOwner(resource.data)
-        && changedOnly(['name', 'updatedAt'])
-        && request.resource.data.updatedAt == request.time
-        && isValidConnection(request.resource.data);
+      allow update: if isOwner(resource.data) && (
+        isSoftDelete()
+        || (
+          isActive(resource.data)
+          && changedOnly(['name', 'updatedAt'])
+          && request.resource.data.updatedAt == request.time
+          && isValidConnection(request.resource.data)
+        )
+      );
     }
 
     // ---------- Contatos ----------
@@ -70,19 +103,26 @@ service cloud.firestore {
           && data.phone.matches('^[+][1-9][0-9]{7,14}$');
       }
 
-      allow read, delete: if isOwner(resource.data);
+      allow read: if isOwner(resource.data);
+      allow delete: if false;
 
       allow create: if isOwner(request.resource.data)
-        && request.resource.data.keys().hasOnly(['tenantId', 'connectionId', 'name', 'phone', 'createdAt', 'updatedAt'])
-        && request.resource.data.keys().hasAll(['tenantId', 'connectionId', 'name', 'phone', 'createdAt', 'updatedAt'])
-        && ownsConnection(request.resource.data.connectionId)
+        && request.resource.data.keys().hasOnly(['tenantId', 'connectionId', 'name', 'phone', 'enabled', 'deletedAt', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['tenantId', 'connectionId', 'name', 'phone', 'enabled', 'deletedAt', 'createdAt', 'updatedAt'])
+        && ownsActiveConnection(request.resource.data.connectionId)
         && isCreatedNow(request.resource.data)
+        && isCreatedActive(request.resource.data)
         && isValidContact(request.resource.data);
 
-      allow update: if isOwner(resource.data)
-        && changedOnly(['name', 'phone', 'updatedAt'])
-        && request.resource.data.updatedAt == request.time
-        && isValidContact(request.resource.data);
+      allow update: if isOwner(resource.data) && (
+        isSoftDelete()
+        || (
+          isActive(resource.data)
+          && changedOnly(['name', 'phone', 'updatedAt'])
+          && request.resource.data.updatedAt == request.time
+          && isValidContact(request.resource.data)
+        )
+      );
     }
 
     // ---------- Mensagens ----------
@@ -117,30 +157,38 @@ service cloud.firestore {
         return isSendNow(data) || isSchedule(data);
       }
 
-      allow read, delete: if isOwner(resource.data);
+      allow read: if isOwner(resource.data);
+      allow delete: if false;
 
       allow create: if isOwner(request.resource.data)
         && request.resource.data.keys().hasOnly([
           'tenantId', 'connectionId', 'body', 'recipientIds', 'recipients',
-          'status', 'scheduledAt', 'sentAt', 'createdAt', 'updatedAt'
+          'status', 'scheduledAt', 'sentAt', 'enabled', 'deletedAt', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.keys().hasAll([
           'tenantId', 'connectionId', 'body', 'recipientIds', 'recipients',
-          'status', 'scheduledAt', 'sentAt', 'createdAt', 'updatedAt'
+          'status', 'scheduledAt', 'sentAt', 'enabled', 'deletedAt', 'createdAt', 'updatedAt'
         ])
-        && ownsConnection(request.resource.data.connectionId)
+        && ownsActiveConnection(request.resource.data.connectionId)
         && isCreatedNow(request.resource.data)
+        && isCreatedActive(request.resource.data)
         && isValidContent(request.resource.data)
         && isValidDispatch(request.resource.data);
 
-      // Só mensagens agendadas podem ser editadas: reagendar, alterar conteúdo ou "enviar agora".
-      // Mensagens enviadas são histórico (apenas exclusão).
-      allow update: if isOwner(resource.data)
-        && resource.data.status == 'scheduled'
-        && changedOnly(['body', 'recipientIds', 'recipients', 'status', 'scheduledAt', 'sentAt', 'updatedAt'])
-        && request.resource.data.updatedAt == request.time
-        && isValidContent(request.resource.data)
-        && isValidDispatch(request.resource.data);
+      // Excluir (soft delete) vale para enviadas e agendadas.
+      // Editar só enquanto agendada e ativa: reagendar, alterar conteúdo ou "enviar agora".
+      // Mensagens enviadas são histórico.
+      allow update: if isOwner(resource.data) && (
+        isSoftDelete()
+        || (
+          isActive(resource.data)
+          && resource.data.status == 'scheduled'
+          && changedOnly(['body', 'recipientIds', 'recipients', 'status', 'scheduledAt', 'sentAt', 'updatedAt'])
+          && request.resource.data.updatedAt == request.time
+          && isValidContent(request.resource.data)
+          && isValidDispatch(request.resource.data)
+        )
+      );
     }
   }
 }

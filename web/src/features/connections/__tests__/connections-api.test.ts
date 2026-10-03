@@ -33,12 +33,16 @@ beforeEach(() => {
 });
 
 describe('subscribeConnections', () => {
-  it('consulta apenas as conexões do tenant, mais recentes primeiro', () => {
+  it('consulta apenas as conexões ativas do tenant, mais recentes primeiro', () => {
     subscribeConnections('u1')(vi.fn(), vi.fn());
 
     expect(firestore.collection).toHaveBeenCalledWith(db, 'connections');
-    expect(firestore.where).toHaveBeenCalledWith('tenantId', '==', 'u1');
-    expect(firestore.orderBy).toHaveBeenCalledWith('createdAt', 'desc');
+    expect(firestore.query).toHaveBeenCalledWith(
+      { path: 'connections' },
+      { where: ['tenantId', '==', 'u1'] },
+      { where: ['enabled', '==', true] },
+      { orderBy: ['createdAt', 'desc'] },
+    );
   });
 
   it('entrega a lista mapeada com id e repassa erros', () => {
@@ -70,7 +74,7 @@ describe('subscribeConnections', () => {
 });
 
 describe('subscribeConnection', () => {
-  it('observa o documento e entrega null quando não existe', () => {
+  it('observa o documento e entrega null quando não existe ou está desativado', () => {
     const onNext = vi.fn();
     subscribeConnection('c1')(onNext, vi.fn());
 
@@ -80,8 +84,11 @@ describe('subscribeConnection', () => {
       (snapshot: unknown) => void,
     ];
 
-    emit(snapshotDoc('c1', { name: 'Vendas' }));
-    expect(onNext).toHaveBeenLastCalledWith({ id: 'c1', name: 'Vendas' });
+    emit(snapshotDoc('c1', { name: 'Vendas', enabled: true }));
+    expect(onNext).toHaveBeenLastCalledWith({ id: 'c1', name: 'Vendas', enabled: true });
+
+    emit(snapshotDoc('c1', { name: 'Vendas', enabled: false }));
+    expect(onNext).toHaveBeenLastCalledWith(null);
 
     emit({ id: 'c1', exists: () => false, data: () => undefined });
     expect(onNext).toHaveBeenLastCalledWith(null);
@@ -89,13 +96,15 @@ describe('subscribeConnection', () => {
 });
 
 describe('escritas', () => {
-  it('createConnection grava tenant, nome sem espaços e timestamps do servidor', async () => {
+  it('createConnection grava tenant, nome sem espaços, ativa e com timestamps do servidor', async () => {
     await createConnection('u1', { name: '  Vendas ' });
     expect(firestore.addDoc).toHaveBeenCalledWith(
       { path: 'connections' },
       {
         tenantId: 'u1',
         name: 'Vendas',
+        enabled: true,
+        deletedAt: null,
         createdAt: 'SERVER_TIMESTAMP',
         updatedAt: 'SERVER_TIMESTAMP',
       },
@@ -110,8 +119,12 @@ describe('escritas', () => {
     );
   });
 
-  it('deleteConnection remove o documento', async () => {
+  it('deleteConnection faz soft delete (desativa) em vez de apagar', async () => {
     await deleteConnection('c1');
-    expect(firestore.deleteDoc).toHaveBeenCalledWith({ path: 'connections/c1' });
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { path: 'connections/c1' },
+      { enabled: false, deletedAt: 'SERVER_TIMESTAMP', updatedAt: 'SERVER_TIMESTAMP' },
+    );
+    expect(firestore.deleteDoc).not.toHaveBeenCalled();
   });
 });

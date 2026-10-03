@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 describe('subscribeContacts', () => {
-  it('consulta os contatos do tenant e da conexão, em ordem alfabética', () => {
+  it('consulta os contatos ativos do tenant e da conexão, em ordem alfabética', () => {
     subscribeContacts('u1', 'c1')(vi.fn(), vi.fn());
 
     expect(firestore.collection).toHaveBeenCalledWith(db, 'contacts');
@@ -34,6 +34,7 @@ describe('subscribeContacts', () => {
       { path: 'contacts' },
       { where: ['tenantId', '==', 'u1'] },
       { where: ['connectionId', '==', 'c1'] },
+      { where: ['enabled', '==', true] },
       { orderBy: ['name', 'asc'] },
     );
   });
@@ -58,7 +59,7 @@ describe('subscribeContacts', () => {
 });
 
 describe('escritas', () => {
-  it('createContact grava tenant, conexão e timestamps do servidor', async () => {
+  it('createContact grava tenant, conexão, ativo e com timestamps do servidor', async () => {
     await createContact('u1', 'c1', { name: ' Maria ', phone: '+5511999998888' });
     expect(firestore.addDoc).toHaveBeenCalledWith(
       { path: 'contacts' },
@@ -67,6 +68,8 @@ describe('escritas', () => {
         connectionId: 'c1',
         name: 'Maria',
         phone: '+5511999998888',
+        enabled: true,
+        deletedAt: null,
         createdAt: 'SERVER_TIMESTAMP',
         updatedAt: 'SERVER_TIMESTAMP',
       },
@@ -81,8 +84,12 @@ describe('escritas', () => {
     );
   });
 
-  it('deleteContact remove o documento', async () => {
+  it('deleteContact faz soft delete (desativa) em vez de apagar', async () => {
     await deleteContact('k1');
-    expect(firestore.deleteDoc).toHaveBeenCalledWith({ path: 'contacts/k1' });
+    expect(firestore.updateDoc).toHaveBeenCalledWith(
+      { path: 'contacts/k1' },
+      { enabled: false, deletedAt: 'SERVER_TIMESTAMP', updatedAt: 'SERVER_TIMESTAMP' },
+    );
+    expect(firestore.deleteDoc).not.toHaveBeenCalled();
   });
 });

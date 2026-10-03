@@ -1,7 +1,6 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -12,14 +11,22 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Subscribe } from '@/shared/hooks/use-subscription';
-import { fromSnapshot } from '@/shared/utils/firestore';
+import {
+  fromSnapshot,
+  newDocumentFields,
+  onlyActive,
+  softDeleteFields,
+} from '@/shared/utils/firestore';
 import type { Connection, ConnectionInput } from '../types/connection';
 
 const COLLECTION = 'connections';
 
 const connectionRef = (connectionId: string) => doc(db, COLLECTION, connectionId);
 
-/** Conexões do cliente, mais recentes primeiro, em tempo real. O filtro por tenant é obrigatório (rules). */
+/**
+ * Conexões ativas do cliente, mais recentes primeiro, em tempo real.
+ * O filtro por tenant é obrigatório (rules); o de `enabled` aplica o soft delete.
+ */
 export const subscribeConnections =
   (tenantId: string): Subscribe<Connection[]> =>
   (onNext, onError) =>
@@ -27,32 +34,38 @@ export const subscribeConnections =
       query(
         collection(db, COLLECTION),
         where('tenantId', '==', tenantId),
+        onlyActive(),
         orderBy('createdAt', 'desc'),
       ),
       (snapshot) => onNext(snapshot.docs.map((item) => fromSnapshot<Connection>(item))),
       onError,
     );
 
-/** Uma conexão em tempo real; `null` se foi excluída. Conexão de outro cliente é negada pelas rules. */
+/**
+ * Uma conexão em tempo real; `null` se não existe ou foi excluída (desativada).
+ * Conexão de outro cliente é negada pelas rules.
+ */
 export const subscribeConnection =
   (connectionId: string): Subscribe<Connection | null> =>
   (onNext, onError) =>
     onSnapshot(
       connectionRef(connectionId),
-      (snapshot) => onNext(snapshot.exists() ? fromSnapshot<Connection>(snapshot) : null),
+      (snapshot) => {
+        const connection = snapshot.exists() ? fromSnapshot<Connection>(snapshot) : null;
+        onNext(connection?.enabled ? connection : null);
+      },
       onError,
     );
 
 export const createConnection = (tenantId: string, { name }: ConnectionInput) =>
-  addDoc(collection(db, COLLECTION), {
-    tenantId,
-    name: name.trim(),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  addDoc(collection(db, COLLECTION), { tenantId, name: name.trim(), ...newDocumentFields() });
 
 export const updateConnection = (connectionId: string, { name }: ConnectionInput) =>
   updateDoc(connectionRef(connectionId), { name: name.trim(), updatedAt: serverTimestamp() });
 
-/** Contatos e mensagens da conexão são removidos no backend (Cloud Function de cascata). */
-export const deleteConnection = (connectionId: string) => deleteDoc(connectionRef(connectionId));
+/**
+ * Soft delete: a conexão é desativada, não apagada.
+ * Contatos e mensagens dela são desativados no backend (Cloud Function de cascata).
+ */
+export const deleteConnection = (connectionId: string) =>
+  updateDoc(connectionRef(connectionId), softDeleteFields());
