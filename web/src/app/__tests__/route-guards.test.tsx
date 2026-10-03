@@ -1,8 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { signOut } from '@/features/auth/api/auth-api';
 import { useAuthStore } from '@/features/auth/stores/auth-store';
+import { useNotificationStore } from '@/shared/stores/notification-store';
 import { ProtectedRoute, PublicOnlyRoute } from '../route-guards';
+
+vi.mock('@/features/auth/api/auth-api', () => ({ signOut: vi.fn() }));
 
 const initialState = useAuthStore.getState();
 const user = { uid: 'u1', email: 'joao@teste.com', displayName: 'João' };
@@ -49,10 +54,40 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('login (from /connections/abc)')).toBeInTheDocument();
   });
 
-  it('renderiza a rota para usuário autenticado', () => {
+  it('renderiza a rota dentro do layout para usuário autenticado', () => {
     useAuthStore.getState().setUser(user);
     renderAt('/connections');
-    expect(screen.getByText('connections')).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveTextContent('connections');
+    expect(screen.getByRole('button', { name: 'Conta' })).toBeInTheDocument();
+  });
+
+  it('o menu da conta encerra a sessão', async () => {
+    vi.mocked(signOut).mockResolvedValue();
+    useAuthStore.getState().setUser(user);
+    renderAt('/connections');
+    const ui = userEvent.setup();
+
+    await ui.click(screen.getByRole('button', { name: 'Conta' }));
+    await ui.click(screen.getByRole('menuitem', { name: 'Sair' }));
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('avisa quando não consegue sair', async () => {
+    vi.mocked(signOut).mockRejectedValue(new Error('offline'));
+    useAuthStore.getState().setUser(user);
+    renderAt('/connections');
+    const ui = userEvent.setup();
+
+    await ui.click(screen.getByRole('button', { name: 'Conta' }));
+    await ui.click(screen.getByRole('menuitem', { name: 'Sair' }));
+
+    await waitFor(() =>
+      expect(useNotificationStore.getState().notification).toMatchObject({
+        message: 'Não foi possível sair. Tente novamente.',
+        severity: 'error',
+      }),
+    );
   });
 });
 

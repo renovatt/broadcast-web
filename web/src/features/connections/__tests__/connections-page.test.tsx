@@ -1,31 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '@test-utils/render';
-import { signOut } from '@/features/auth/api/auth-api';
-import { useAuthStore } from '@/features/auth/stores/auth-store';
 import { ConnectionsPage } from '../pages/connections-page';
 
-vi.mock('@/features/auth/api/auth-api', () => ({ signOut: vi.fn() }));
-
-beforeEach(() => {
-  useAuthStore.getState().setUser({ uid: 'u1', email: 'joao@teste.com', displayName: 'João' });
-});
-
 describe('ConnectionsPage (provisória)', () => {
-  it('cumprimenta o usuário pelo nome', () => {
+  it('mostra o cabeçalho e o estado vazio', () => {
     renderWithProviders(<ConnectionsPage />);
-    expect(screen.getByRole('heading', { name: 'Olá, João' })).toBeInTheDocument();
-  });
-
-  it('usa o e-mail quando não há nome', () => {
-    useAuthStore.getState().setUser({ uid: 'u1', email: 'joao@teste.com', displayName: null });
-    renderWithProviders(<ConnectionsPage />);
-    expect(screen.getByRole('heading', { name: 'Olá, joao@teste.com' })).toBeInTheDocument();
-  });
-
-  it('encerra a sessão ao clicar em Sair', async () => {
-    const { user } = renderWithProviders(<ConnectionsPage />);
-    await user.click(screen.getByRole('button', { name: 'Sair' }));
-    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Conexões' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Nenhuma conexão ainda' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nova conexão' })).toBeDisabled();
   });
 });
