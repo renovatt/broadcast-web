@@ -35,13 +35,15 @@ describe('useSubscription', () => {
     expect(result.current.data).toBe(2);
   });
 
-  it('expõe o erro da fonte', () => {
+  it('expõe o erro da fonte e o registra no console (link de índice do Firestore)', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const source = createSource<number>();
     const { result } = renderHook(() => useSubscription(source.subscribe));
     const error = new Error('permission-denied');
 
     act(() => source.fail(error));
     expect(result.current).toEqual({ data: undefined, error, loading: false });
+    expect(consoleError).toHaveBeenCalledWith(error);
   });
 
   it('cancela a inscrição ao desmontar', () => {

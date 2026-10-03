@@ -3,9 +3,8 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 import { AppLayout } from '@/components/app-layout';
 import { LoadingScreen } from '@/components/loading-screen';
 import { signOut } from '@/features/auth/api/auth-api';
+import { ROUTES } from '@/shared/constants/routes';
 import { notify } from '@/shared/stores/notification-store';
-
-export const HOME_PATH = '/connections';
 
 type RedirectState = { from?: string } | null;
 
@@ -21,9 +20,9 @@ export const ProtectedRoute = () => {
   const location = useLocation();
 
   if (loading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!user) return <Navigate to={ROUTES.login} replace state={{ from: location.pathname }} />;
   return (
-    <AppLayout user={user} homePath={HOME_PATH} onSignOut={handleSignOut}>
+    <AppLayout user={user} homePath={ROUTES.connections} onSignOut={handleSignOut}>
       <Outlet />
     </AppLayout>
   );
@@ -35,6 +34,6 @@ export const PublicOnlyRoute = () => {
   const state = useLocation().state as RedirectState;
 
   if (loading) return <LoadingScreen />;
-  if (user) return <Navigate to={state?.from ?? HOME_PATH} replace />;
+  if (user) return <Navigate to={state?.from ?? ROUTES.connections} replace />;
   return <Outlet />;
 };

@@ -24,7 +24,11 @@ export const useSubscription = <T>(subscribe: Subscribe<T> | null) => {
     if (!subscribe) return undefined;
     return subscribe(
       (data) => setState({ source: subscribe, data }),
-      (error) => setState({ source: subscribe, error }),
+      (error) => {
+        // Mantém o erro original no console: o Firestore inclui nele o link para criar índices.
+        console.error(error);
+        setState({ source: subscribe, error });
+      },
     );
   }, [subscribe]);
 
