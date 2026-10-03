@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '@test-utils/render';
 import { ConnectionCard } from '../_components/connection-card';
 import type { Connection } from '../types/connection';
@@ -48,5 +48,41 @@ describe('ConnectionCard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Excluir WhatsApp Vendas' }));
     expect(onDelete).toHaveBeenCalledWith(connection);
+  });
+});
+
+describe('ConnectionCard — resumo', () => {
+  const summary = () => screen.getByRole('list', { name: 'Resumo da conexão' });
+
+  it('mostra contatos, enviadas e agendadas vindos de stats', () => {
+    renderWithProviders(
+      <ConnectionCard
+        connection={{ ...connection, stats: { contacts: 12, sent: 30, scheduled: 4 } }}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const items = within(summary()).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      '12 contatos',
+      '30 enviadas',
+      '4 agendadas',
+    ]);
+  });
+
+  it('usa singular quando o número é 1', () => {
+    renderWithProviders(
+      <ConnectionCard
+        connection={{ ...connection, stats: { contacts: 1, sent: 1, scheduled: 1 } }}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(summary()).toHaveTextContent('1 contato1 enviada1 agendada');
+  });
+
+  it('sem stats (conexão nova) mostra tudo zerado', () => {
+    renderCard();
+    expect(summary()).toHaveTextContent('0 contatos0 enviadas0 agendadas');
   });
 });

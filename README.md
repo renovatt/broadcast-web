@@ -126,10 +126,15 @@ Os cenários de acesso cruzado e de soft delete são cobertos por testes automat
 Região `southamerica-east1` (a mesma do Firestore). Toda a lógica fica em funções puras que recebem
 o `db` e são testadas contra o emulador; os gatilhos só as chamam.
 
-| Function                    | Gatilho                                        | O que faz                                                                                                                                    |
-| --------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dispatchScheduledMessages` | Cloud Scheduler, a cada minuto                 | Marca como `sent` (com `sentAt` do servidor) as mensagens `scheduled` e ativas cujo `scheduledAt` já passou. Funciona com o app fechado.     |
-| `onConnectionDisabled`      | Update em `connections/{id}` (ativa → inativa) | Cascata do soft delete: desativa os contatos e as mensagens da conexão com o mesmo `deletedAt`. Agendadas desativadas não são mais enviadas. |
+| Function                                | Gatilho                                        | O que faz                                                                                                                                    |
+| --------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dispatchScheduledMessages`             | Cloud Scheduler, a cada minuto                 | Marca como `sent` (com `sentAt` do servidor) as mensagens `scheduled` e ativas cujo `scheduledAt` já passou. Funciona com o app fechado.     |
+| `onConnectionDisabled`                  | Update em `connections/{id}` (ativa → inativa) | Cascata do soft delete: desativa os contatos e as mensagens da conexão com o mesmo `deletedAt`. Agendadas desativadas não são mais enviadas. |
+| `onContactWritten` / `onMessageWritten` | Escrita em `contacts/{id}` / `messages/{id}`   | Mantém o resumo `connections/{id}.stats` (contatos, enviadas, agendadas) exibido em tempo real no card da conexão.                           |
+
+O resumo é **recalculado** com `count()` dentro de uma transação (e não somado/subtraído), então é
+idempotente: eventos repetidos ou fora de ordem não deixam o número errado. Só roda quando algo que
+afeta a contagem muda (criação, exclusão, status). As rules impedem o cliente de gravar `stats`.
 
 Garantias do envio agendado:
 

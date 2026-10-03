@@ -5,3 +5,4 @@ setGlobalOptions({ region: 'southamerica-east1', maxInstances: 5 });
 
 export { dispatchScheduledMessages } from './messages/dispatch-scheduled-messages';
 export { onConnectionDisabled } from './connections/on-connection-disabled';
+export { onContactWritten, onMessageWritten } from './connections/on-connection-child-written';

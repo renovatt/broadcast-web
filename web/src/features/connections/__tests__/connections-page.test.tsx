@@ -64,7 +64,7 @@ describe('ConnectionsPage', () => {
     renderWithProviders(<ConnectionsPage />);
 
     const list = screen.getByRole('list', { name: 'Conexões' });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(list).getAllByRole('article')).toHaveLength(2);
     expect(within(list).getByRole('heading', { name: 'Vendas' })).toBeInTheDocument();
   });
 

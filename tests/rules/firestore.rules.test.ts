@@ -265,6 +265,15 @@ describe('connections', () => {
     await assertFails(deleteDoc(doc(db, 'connections/bob-conn')));
   });
 
+  it('cliente não grava o resumo (stats): só a Cloud Function, via Admin SDK', async () => {
+    const db = dbAs(ALICE);
+    const stats = { contacts: 999, sent: 999, scheduled: 999 };
+    await assertFails(
+      updateDoc(doc(db, 'connections/alice-conn'), { stats, updatedAt: serverTimestamp() }),
+    );
+    await assertFails(setDoc(doc(db, 'connections/new'), newConnection(ALICE, { stats })));
+  });
+
   it('dono "exclui" a própria conexão via soft delete', async () => {
     await assertSucceeds(updateDoc(doc(dbAs(ALICE), 'connections/alice-conn'), softDelete()));
   });
