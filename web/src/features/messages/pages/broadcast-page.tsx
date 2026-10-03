@@ -6,6 +6,7 @@ import { useCurrentConnection } from '@/features/connections/hooks/use-connectio
 import { useContacts } from '@/features/contacts/hooks/use-contacts';
 import { notify } from '@/shared/stores/notification-store';
 import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
+import { withFeedback } from '@/shared/utils/with-feedback';
 import { deleteMessage } from '../api/messages-api';
 import { EditMessageDialog } from '../_components/edit-message-dialog';
 import { MessageComposer } from '../_components/message-composer';
@@ -33,14 +34,7 @@ export const BroadcastPage = () => {
   }, [editingLost]);
 
   const confirmDelete = async () => {
-    if (!toDelete) return;
-    try {
-      await deleteMessage(toDelete.id);
-      notify.success('Mensagem excluída.');
-    } catch (error) {
-      notify.error(getFirestoreErrorMessage(error));
-      throw error;
-    }
+    if (toDelete) await withFeedback(() => deleteMessage(toDelete.id), 'Mensagem excluída.');
   };
 
   const renderComposer = () => {

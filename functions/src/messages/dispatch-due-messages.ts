@@ -5,7 +5,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase-admin/firestore';
 
-export const DISPATCH_PAGE_SIZE = 500;
+const DISPATCH_PAGE_SIZE = 500;
 
 export type DispatchResult = {
   /** Mensagens marcadas como enviadas. */

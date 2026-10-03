@@ -7,8 +7,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import { RhfTextField } from '@/components/rhf/rhf-text-field';
 import { useCurrentUser } from '@/features/auth/hooks/use-auth';
-import { notify } from '@/shared/stores/notification-store';
-import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
+import { withFeedback } from '@/shared/utils/with-feedback';
 import { createConnection, updateConnection } from '../api/connections-api';
 import { connectionSchema, type ConnectionFormValues } from '../schemas/connection-schemas';
 import type { Connection } from '../types/connection';
@@ -34,12 +33,14 @@ export const ConnectionFormDialog = ({ connection, onClose }: ConnectionFormDial
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      if (connection) await updateConnection(connection.id, values);
-      else await createConnection(uid, values);
-      notify.success(isEditing ? 'Conexão atualizada.' : 'Conexão criada.');
+      await withFeedback<unknown>(
+        () =>
+          connection ? updateConnection(connection.id, values) : createConnection(uid, values),
+        isEditing ? 'Conexão atualizada.' : 'Conexão criada.',
+      );
       onClose();
-    } catch (error) {
-      notify.error(getFirestoreErrorMessage(error));
+    } catch {
+      // O toast de erro já foi exibido; o diálogo continua aberto com os valores digitados.
     }
   });
 

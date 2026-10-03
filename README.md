@@ -1,163 +1,288 @@
 # Broadcast
 
-Aplicação SaaS multi-tenant de envio (simulado) de mensagens em massa — React + TypeScript + Firebase.
+Aplicação SaaS **multi-tenant** de envio de mensagens em massa (envio simulado), feita com
+**React + TypeScript + Firebase** (Authentication, Firestore, Cloud Functions e Hosting).
 
-## Estrutura
+> 🔗 **App publicado:** _link adicionado após o deploy_
+
+Cada usuário cadastrado é um **cliente**. O cliente gerencia suas **conexões**; cada conexão tem
+seus **contatos** e suas **mensagens**. Mensagens podem ser enviadas na hora ou **agendadas** — no
+horário, uma Cloud Function as marca como enviadas, **mesmo com o app fechado**.
+
+---
+
+## Sumário
+
+- [Funcionalidades](#funcionalidades)
+- [Stack](#stack)
+- [Arquitetura](#arquitetura)
+- [Modelagem de dados](#modelagem-de-dados)
+- [Isolamento entre clientes](#isolamento-entre-clientes)
+- [Soft delete](#soft-delete)
+- [Cloud Functions](#cloud-functions)
+- [Organização do código](#organização-do-código)
+- [Qualidade e testes](#qualidade-e-testes)
+- [Rodando localmente](#rodando-localmente)
+- [Deploy](#deploy)
+- [Decisões técnicas](#decisões-técnicas)
+- [Scripts](#scripts)
+
+---
+
+## Funcionalidades
+
+| Requisito                       | Como foi atendido                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Login e cadastro                | Firebase Auth com **e-mail/senha** e **Google**; rotas protegidas; sessão persistente                       |
+| Cada usuário é um cliente       | O `uid` do usuário é o `tenantId` de todos os seus dados                                                    |
+| CRUD de conexões                | Lista em cards, criar/editar/excluir, resumo em tempo real (contatos, enviadas, agendadas)                  |
+| CRUD de contatos por conexão    | Tabela com busca, máscara de telefone, validação e bloqueio de telefone duplicado na conexão                |
+| Broadcast                       | Selecionar contatos, escrever, **enviar agora** ou **agendar** (data/hora futura)                           |
+| Visualizar e filtrar mensagens  | Histórico com filtros **Todas / Enviadas / Agendadas** e contadores                                         |
+| Editar e excluir mensagens      | Agendadas podem ser editadas (texto, destinatários, data ou "enviar agora"); qualquer uma pode ser excluída |
+| Agendada → Enviada no backend   | Cloud Function agendada a cada minuto, independente do navegador                                            |
+| Tempo real                      | Todas as listas usam `onSnapshot`; mudanças feitas pelas functions aparecem sem recarregar                  |
+| SaaS multi-tenant / isolamento  | Security Rules + `tenantId` em todos os documentos + testes de acesso cruzado                               |
+| Sem subcoleções                 | Três coleções na raiz, relacionadas por ID                                                                  |
+| MUI + Tailwind, Vite, funcional | MUI para componentes, Tailwind para layout; Vite; sem classes (regra de lint)                               |
+
+## Stack
+
+- **Frontend (`/web`)**: React 19, TypeScript, Vite, Material UI (+ MUI X Date Pickers), Tailwind CSS 4,
+  React Router, React Hook Form + Zod, Zustand, Day.js, `@react-input/mask`.
+- **Backend (`/functions`)**: Cloud Functions v2 (Node 24, região `southamerica-east1`), Firebase Admin SDK.
+- **Firebase**: Authentication, Firestore (Security Rules + índices versionados), Cloud Scheduler, Hosting.
+- **Qualidade**: Vitest, Testing Library, `@firebase/rules-unit-testing`, ESLint, Prettier, Husky + lint-staged.
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+    subgraph Browser["/web (React, Firebase Hosting)"]
+        UI[Páginas] --> Hooks[Hooks em tempo real<br/>onSnapshot]
+        Hooks --> Api[Camada api/<br/>funções puras]
+    end
+
+    subgraph Firebase
+        Auth[Authentication]
+        Rules{{Security Rules<br/>tenantId == auth.uid}}
+        FS[(Firestore<br/>connections · contacts · messages)]
+        Scheduler[Cloud Scheduler<br/>a cada minuto]
+        Dispatch[/dispatchScheduledMessages/]
+        Cascade[/onConnectionDisabled/]
+        Stats[/onContactWritten<br/>onMessageWritten/]
+    end
+
+    Api --> Auth
+    Api --> Rules --> FS
+    FS -. tempo real .-> Hooks
+    Scheduler --> Dispatch -->|Admin SDK| FS
+    FS -->|conexão desativada| Cascade -->|Admin SDK| FS
+    FS -->|contato/mensagem mudou| Stats -->|Admin SDK| FS
+```
+
+O navegador só lê e escreve o que as Security Rules permitem. Tudo que precisa acontecer **sem o
+usuário** (envio agendado, cascata da exclusão, contadores) roda nas Cloud Functions com o Admin SDK.
+
+## Modelagem de dados
+
+Três coleções **na raiz** — sem subcoleções — relacionadas por ID. **Todo documento carrega
+`tenantId`** (o `uid` do cliente dono) e os campos de ciclo de vida
+`enabled`, `deletedAt`, `createdAt`, `updatedAt`.
+
+```mermaid
+erDiagram
+    USER ||--o{ CONNECTION : "tenantId"
+    CONNECTION ||--o{ CONTACT : "connectionId"
+    CONNECTION ||--o{ MESSAGE : "connectionId"
+    MESSAGE }o--o{ CONTACT : "recipientIds (snapshot)"
+```
+
+| Coleção       | Campos                                                                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connections` | `tenantId`, `name`, `stats { contacts, sent, scheduled }` _(mantido pela Cloud Function)_                                                                  |
+| `contacts`    | `tenantId`, `connectionId`, `name`, `phone` (E.164, ex.: `+5511999998888`)                                                                                 |
+| `messages`    | `tenantId`, `connectionId`, `body`, `recipientIds`, `recipients` (snapshot `{id, name, phone}`), `status` (`scheduled` \| `sent`), `scheduledAt`, `sentAt` |
+
+Escolhas:
+
+- **`tenantId` em todas as coleções** (e não só na conexão): cada documento se protege sozinho nas
+  rules e toda consulta filtra direto por dono, sem precisar ler a conexão.
+- **Destinatários como snapshot**: a mensagem enviada é um registro histórico; editar ou excluir um
+  contato depois não altera para quem ela foi.
+- **Resumo desnormalizado** (`connections.stats`): o card mostra contagens em tempo real com uma única
+  leitura por conexão, em vez de assinar todos os contatos e mensagens só para contar.
+- **Timestamps sempre do servidor** (`serverTimestamp()`), validados nas rules.
+- Índices compostos em [`firestore.indexes.json`](./firestore.indexes.json).
+
+## Isolamento entre clientes
+
+Três camadas — a primeira é a que **garante**; as outras dão consistência:
+
+1. **Security Rules** ([`firestore.rules`](./firestore.rules)):
+   - leitura e escrita só quando `tenantId == request.auth.uid`;
+   - na criação, o `tenantId` tem que ser o do próprio usuário, e contatos/mensagens só podem apontar
+     para uma conexão **ativa do mesmo cliente** (`get()` na conexão);
+   - `tenantId` e `connectionId` são **imutáveis**; campos permitidos (`hasOnly`) e tamanhos validados;
+   - mensagens: enviar agora exige `sentAt` do servidor; agendar exige data futura (até 1 ano);
+     enviada não pode ser editada;
+   - `stats` e a transição agendada → enviada só podem ser escritas pelo backend.
+2. **Consultas sempre filtradas por `tenantId`** — regras não funcionam como filtro: uma consulta sem
+   esse `where` é negada inteira, o que força o código a estar correto.
+3. **Interface**: abrir pela URL uma conexão de outro cliente mostra "Conexão não encontrada" (a mesma
+   resposta de uma inexistente, sem vazar informação).
+
+Os cenários de acesso cruzado (ler, listar, editar, excluir, mover dados de outro cliente) são
+cobertos por **44 testes automatizados das rules** — `npm run test:rules`.
+
+## Soft delete
+
+Nada é apagado de verdade. "Excluir" desativa o documento:
+
+- todo documento nasce com `enabled: true` e `deletedAt: null`;
+- excluir = `enabled: false` + `deletedAt` do servidor; **as rules proíbem `delete`** e qualquer outra
+  alteração junto;
+- documentos desativados não podem ser editados nem reativados pelo cliente;
+- toda consulta usa `where('enabled', '==', true)`;
+- excluir uma conexão desativa seus contatos e mensagens (Cloud Function de cascata) — e mensagens
+  agendadas de uma conexão excluída nunca são enviadas;
+- o dono ainda pode ler os próprios desativados (base para uma futura lixeira).
+
+## Cloud Functions
+
+| Function                                | Gatilho                                        | O que faz                                                                                |
+| --------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `dispatchScheduledMessages`             | Cloud Scheduler, a cada minuto                 | Marca como `sent` as mensagens agendadas e ativas cujo horário chegou                    |
+| `onConnectionDisabled`                  | Update em `connections/{id}` (ativa → inativa) | Cascata do soft delete: desativa contatos e mensagens da conexão com o mesmo `deletedAt` |
+| `onContactWritten` / `onMessageWritten` | Escrita em `contacts/{id}` / `messages/{id}`   | Recalcula o resumo `connections/{id}.stats`                                              |
+
+- **Envio agendado**: idempotente (só processa `scheduled`), seguro contra concorrência (cada escrita
+  usa a precondição `lastUpdateTime` — se o usuário editou ou excluiu a mensagem no mesmo instante,
+  ela é ignorada e reavaliada no minuto seguinte), paginado em lotes de 500 com `BulkWriter`.
+  Precisão de até ~1 minuto.
+- **Resumo**: **recalculado** com `count()` dentro de uma transação (não somado/subtraído), então
+  eventos repetidos ou fora de ordem não deixam o número errado. Só roda quando algo que afeta a
+  contagem muda.
+- **Padrão**: o gatilho só chama uma função pura que recebe o `db` — e essa função é testada contra o
+  emulador do Firestore.
+
+## Organização do código
 
 ```
-/web         Frontend — React 19, Vite, Material UI, Tailwind CSS
-/functions   Firebase Cloud Functions (v2, Node 24)
-/tests       Testes das Security Rules (Vitest + Firestore Emulator)
-/scripts     Utilitários (JDK portátil para os emuladores)
-firebase.json, firestore.rules, firestore.indexes.json
+/web          frontend
+/functions    Cloud Functions
+/tests        testes das Security Rules
+/scripts      utilitários (JDK portátil, simulador do Cloud Scheduler)
+firebase.json · firestore.rules · firestore.indexes.json
 ```
 
-### Organização do frontend (`web/src`)
+`web/src`:
 
 ```
 app/            bootstrap: providers, tema, rotas e guards
-components/     componentes globais reutilizáveis
-  rhf/          campos de formulário ligados ao react-hook-form (RhfTextField, RhfPasswordField)
-shared/         funções e hooks compartilhados (sem componentes)
-lib/            inicialização de serviços (Firebase)
+components/     componentes globais reutilizáveis (+ rhf/: campos ligados ao react-hook-form)
+shared/         funções, hooks e stores compartilhados (sem componentes)
+lib/            inicialização do Firebase
 features/<nome>/
-  _components/  componentes exclusivos da feature
-  api/          acesso ao Firebase (funções puras)
-  stores/       estado global da feature (Zustand)
-  hooks/  schemas/  types/  utils/
+  _components/  componentes da feature
+  api/          acesso ao Firestore (funções puras)
+  hooks/  schemas/  stores/  types/  utils/
   pages/        telas ligadas às rotas
-  __tests__/    testes de tudo que a feature implementa
+  __tests__/    testes da feature
 ```
 
-Convenções (verificadas pelo ESLint com `eslint-plugin-check-file`):
+Convenções (verificadas pelo ESLint):
 
-- arquivos e pastas em `kebab-case` (pastas privadas de feature com `_`, ex.: `_components`);
-- nenhum arquivo solto na raiz de uma feature;
-- `shared/` não aceita componentes (`.tsx`);
-- paradigma funcional: `class` é proibido; imports internos com o alias `@/` → `web/src`;
-- estado global com **Zustand** (sem React Context);
-- cada módulo tem sua pasta `__tests__` (Vitest + Testing Library + jsdom). Nenhum teste de unidade
-  acessa o Firebase: `@/lib/firebase` é substituído por um stub e o SDK é mockado por teste.
+- **paradigma funcional**: `class` é proibido; dados como `type`, comportamento como funções;
+- camadas: `api/` (Firestore) → `hooks/` (estado React, tempo real) → componentes (só renderizam);
+- arquivos e pastas em `kebab-case`; nada solto na raiz de uma feature; `shared/` sem componentes;
+- estado global com **Zustand** (sessão e notificações), sem React Context;
+- imports internos pelo alias `@/` → `web/src`.
 
-### Git hooks (Husky)
+## Qualidade e testes
 
-- **pre-commit**: ESLint `--fix` + Prettier nos arquivos staged (lint-staged), typecheck completo e testes de unidade.
-- **pre-push**: build de `/web` e `/functions`, testes das Security Rules e testes de integração das Cloud Functions.
+| Suíte                     | Quantidade | Comando                  | O que cobre                                                          |
+| ------------------------- | ---------- | ------------------------ | -------------------------------------------------------------------- |
+| Unidade (`/web`)          | 292        | `npm test`               | Componentes, páginas, hooks, schemas, utilitários (Firebase mockado) |
+| Security Rules (`/tests`) | 44         | `npm run test:rules`     | Isolamento entre clientes, validações, soft delete                   |
+| Integração (`/functions`) | 33         | `npm run test:functions` | Lógica das functions com o Admin SDK real no emulador                |
 
-## Pré-requisitos
-
-- Node.js 24
-- Java 21+ para os emuladores do Firestore. Não precisa instalar: `npm run setup:jdk` baixa um JDK portátil
-  para `.tools/jdk-21` (ignorado pelo git), usado apenas pelos scripts do projeto.
+- Os testes de rules e de functions rodam contra os **emuladores** e têm trava: nunca tocam no projeto real.
+- **Husky**: o _pre-commit_ roda ESLint + Prettier nos arquivos alterados, typecheck e testes de
+  unidade; o _pre-push_ roda o build e os testes de rules e de functions.
+- Os fluxos completos (incluindo envio agendado com o app fechado, cascata e isolamento entre dois
+  usuários) também foram validados no navegador contra os emuladores.
 
 ## Rodando localmente
+
+Pré-requisitos: **Node.js 24**. O Java 21 exigido pelos emuladores **não precisa ser instalado**:
+`npm run setup:jdk` baixa um JDK portátil para `.tools/` (ignorado pelo git).
 
 ```bash
 npm run install:all   # instala raiz, web e functions
 npm run setup:jdk     # JDK portátil para os emuladores (uma vez)
 ```
 
-### Tudo local, com os emuladores (não precisa de projeto Firebase nem do plano Blaze)
+### Tudo local, com os emuladores (não precisa de projeto Firebase)
 
 Em três terminais:
 
 ```bash
-npm run emulators      # Auth, Firestore, Functions e Pub/Sub locais (UI em http://localhost:4000)
-npm run dev:emulator   # app em http://localhost:5173 conectado só aos emuladores (web/.env.emulator)
+npm run emulators      # Auth, Firestore, Functions e Pub/Sub (UI em http://localhost:4000)
+npm run dev:emulator   # app em http://localhost:5173, ligado só aos emuladores (web/.env.emulator)
 npm run scheduler      # simula o Cloud Scheduler: executa o envio agendado a cada minuto
 ```
 
-O emulador não executa funções agendadas sozinho; `npm run scheduler` chama a função a cada minuto
-(`node scripts/trigger-scheduler.mjs` executa uma vez). A cascata ao excluir uma conexão roda sozinha
-(trigger do Firestore). Os dados ficam só na memória dos emuladores.
+O emulador não executa funções agendadas sozinho — `npm run scheduler` faz esse papel. A cascata e o
+resumo rodam sozinhos (triggers do Firestore). Os dados ficam só na memória dos emuladores.
 
-### Contra o projeto Firebase real
+### Contra um projeto Firebase real
 
 ```bash
 cp web/.env.example web/.env.local   # preencha com a config do app Web do Firebase
-npm run dev                          # frontend em http://localhost:5173
+npm run dev
 ```
 
-## Autenticação
+## Deploy
 
-Firebase Authentication com **e-mail/senha** e **Google** (popup). Cada usuário autenticado é um
-cliente (tenant): seu `uid` é o `tenantId` de todos os seus dados. No primeiro login com Google a
-conta é criada automaticamente. Ambos os provedores precisam estar ativos em
-_Authentication → Método de login_ no console do Firebase.
+Requer o plano **Blaze** (Cloud Functions e Cloud Scheduler). Com o projeto configurado em `.firebaserc`:
 
-## Modelagem de dados
+```bash
+npx firebase login
+npm run deploy          # build + rules + índices + functions + hosting
+```
 
-Três coleções na raiz — **sem subcoleções** — relacionadas por ID. Todo documento carrega `tenantId` (uid do cliente dono).
+Os índices compostos levam alguns minutos para ficar ativos após o primeiro deploy.
 
-| Coleção       | Campos próprios                                                                                                |
-| ------------- | -------------------------------------------------------------------------------------------------------------- |
-| `connections` | `tenantId`, `name`                                                                                             |
-| `contacts`    | `tenantId`, `connectionId`, `name`, `phone` (E.164)                                                            |
-| `messages`    | `tenantId`, `connectionId`, `body`, `recipientIds`, `recipients` (snapshot), `status`, `scheduledAt`, `sentAt` |
+## Decisões técnicas
 
-Todas também têm os campos de ciclo de vida: `enabled`, `deletedAt`, `createdAt`, `updatedAt`.
+- **Function agendada a cada minuto em vez de uma tarefa por mensagem (Cloud Tasks)**: simples de editar
+  e cancelar (basta mudar o documento), idempotente e sem estado extra; o custo é uma precisão de até
+  ~1 minuto, adequada ao caso.
+- **Filtro Enviadas/Agendadas no cliente**: uma única inscrição em tempo real por conexão traz as
+  mensagens ativas; filtro e contadores saem dela, sem novas consultas ao trocar de aba.
+- **Soft delete garantido pelas rules**, não só pela interface.
+- **Cascata no backend**: sem subcoleções não existe exclusão "em árvore"; a function trata isso.
+- **Telefone em E.164** no banco (`+5511999998888`), com máscara brasileira na interface e validação
+  igual no cliente e nas rules.
+- **Login com Google por popup**: evita problemas do redirect com cookies de terceiros bloqueados.
+- **Limitação conhecida**: as rules não conseguem validar cada item de `recipientIds` (não há laço);
+  os IDs vêm de contatos que o próprio cliente só consegue ler se forem dele.
 
-## Soft delete
+## Scripts
 
-Nada é apagado de verdade. Todo documento nasce com `enabled: true` e `deletedAt: null`;
-"excluir" desativa o documento (`enabled: false`, `deletedAt` = horário do servidor).
-
-- Toda consulta do app filtra `where('enabled', '==', true)`; os índices compostos incluem `enabled`.
-- As rules proíbem `delete` e só permitem a transição `enabled: true → false` (sem alterar outros
-  campos). Documentos desativados não podem ser editados nem reativados pelo cliente.
-- Não é possível criar contatos ou mensagens em uma conexão desativada.
-- O dono ainda pode ler os próprios documentos desativados (base para uma futura lixeira).
-
-## Isolamento entre clientes
-
-Garantido pelas [Security Rules](./firestore.rules):
-
-- leitura e escrita só quando `resource.data.tenantId == request.auth.uid`;
-- criação só com o próprio `tenantId` e apontando para uma conexão ativa do mesmo cliente;
-- `tenantId` e `connectionId` são imutáveis; campos permitidos e tamanhos são validados;
-- timestamps sempre do servidor; mensagens agendadas só no futuro; mensagens enviadas não são editáveis.
-
-Como regras não funcionam como filtro, toda query do app inclui `where('tenantId', '==', uid)`.
-Os cenários de acesso cruzado e de soft delete são cobertos por testes automatizados:
-`npm run test:rules`.
-
-## Cloud Functions (`/functions`)
-
-Região `southamerica-east1` (a mesma do Firestore). Toda a lógica fica em funções puras que recebem
-o `db` e são testadas contra o emulador; os gatilhos só as chamam.
-
-| Function                                | Gatilho                                        | O que faz                                                                                                                                    |
-| --------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dispatchScheduledMessages`             | Cloud Scheduler, a cada minuto                 | Marca como `sent` (com `sentAt` do servidor) as mensagens `scheduled` e ativas cujo `scheduledAt` já passou. Funciona com o app fechado.     |
-| `onConnectionDisabled`                  | Update em `connections/{id}` (ativa → inativa) | Cascata do soft delete: desativa os contatos e as mensagens da conexão com o mesmo `deletedAt`. Agendadas desativadas não são mais enviadas. |
-| `onContactWritten` / `onMessageWritten` | Escrita em `contacts/{id}` / `messages/{id}`   | Mantém o resumo `connections/{id}.stats` (contatos, enviadas, agendadas) exibido em tempo real no card da conexão.                           |
-
-O resumo é **recalculado** com `count()` dentro de uma transação (e não somado/subtraído), então é
-idempotente: eventos repetidos ou fora de ordem não deixam o número errado. Só roda quando algo que
-afeta a contagem muda (criação, exclusão, status). As rules impedem o cliente de gravar `stats`.
-
-Garantias do envio agendado:
-
-- **idempotente**: só processa `status == scheduled`; executar de novo não reenvia;
-- **seguro contra concorrência**: cada escrita usa a precondição `lastUpdateTime` da leitura — se o
-  usuário editou ou excluiu a mensagem nesse meio-tempo, ela é ignorada e reavaliada no minuto seguinte;
-- **paginado** (lotes de 500) e com `BulkWriter`: uma falha isolada não derruba as demais;
-- precisão de até ~1 minuto (granularidade do Cloud Scheduler).
-
-## Scripts (raiz)
-
-| Script                   | Descrição                                            |
-| ------------------------ | ---------------------------------------------------- |
-| `npm run dev`            | Vite dev server do `/web` (projeto Firebase real)    |
-| `npm run dev:emulator`   | Vite dev server do `/web` conectado aos emuladores   |
-| `npm run emulators`      | Compila as functions e sobe os emuladores            |
-| `npm test`               | Testes de unidade do `/web`                          |
-| `npm run test:rules`     | Testes das Security Rules no emulador do Firestore   |
-| `npm run test:functions` | Testes de integração das Cloud Functions (emulador)  |
-| `npm run scheduler`      | Simula o Cloud Scheduler local (envio a cada minuto) |
-| `npm run setup:jdk`      | Baixa o JDK 21 portátil usado pelos emuladores       |
-| `npm run build`          | Build de `/web` e `/functions`                       |
-| `npm run lint`           | ESLint em `/web` e `/functions`                      |
-| `npm run typecheck`      | TypeScript em `/tests`, `/web` e `/functions`        |
-| `npm run format`         | Prettier                                             |
-| `npm run deploy`         | Deploy completo (rules, indexes, functions, hosting) |
+| Script                   | Descrição                                             |
+| ------------------------ | ----------------------------------------------------- |
+| `npm run dev`            | App contra o projeto Firebase real                    |
+| `npm run dev:emulator`   | App contra os emuladores                              |
+| `npm run emulators`      | Compila as functions e sobe os emuladores             |
+| `npm run scheduler`      | Simula o Cloud Scheduler local (envio a cada minuto)  |
+| `npm test`               | Testes de unidade do `/web`                           |
+| `npm run test:rules`     | Testes das Security Rules                             |
+| `npm run test:functions` | Testes de integração das Cloud Functions              |
+| `npm run build`          | Build de `/web` e `/functions`                        |
+| `npm run lint`           | ESLint em `/web` e `/functions`                       |
+| `npm run typecheck`      | TypeScript em `/tests`, `/web` e `/functions`         |
+| `npm run format`         | Prettier                                              |
+| `npm run setup:jdk`      | Baixa o JDK 21 portátil usado pelos emuladores        |
+| `npm run deploy`         | Deploy completo (rules, índices, functions e hosting) |

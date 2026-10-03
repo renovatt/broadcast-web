@@ -13,6 +13,7 @@ import DoneAllIcon from '@mui/icons-material/DoneAll';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import { TruncatedText } from '@/components/truncated-text';
 import { ROUTES } from '@/shared/constants/routes';
 import { formatDate } from '@/shared/utils/date';
 import type { Connection, ConnectionStats } from '../types/connection';
@@ -49,9 +50,7 @@ export const ConnectionCard = ({ connection, onEdit, onDelete }: ConnectionCardP
       <CardContent className="flex flex-1 flex-col gap-3">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <Typography variant="h6" component="h2" className="truncate" title={connection.name}>
-              {connection.name}
-            </Typography>
+            <TruncatedText variant="h6" component="h2" text={connection.name} />
             <Typography variant="body2" color="text.secondary">
               Criada em {formatDate(connection.createdAt)}
             </Typography>
@@ -81,7 +80,7 @@ export const ConnectionCard = ({ connection, onEdit, onDelete }: ConnectionCardP
           <Stat
             icon={<PeopleOutlinedIcon />}
             label={plural(stats.contacts, 'contato', 'contatos')}
-            className="bg-blue-50 text-blue-800"
+            className="bg-indigo-50 text-indigo-800"
           />
           <Stat
             icon={<DoneAllIcon />}

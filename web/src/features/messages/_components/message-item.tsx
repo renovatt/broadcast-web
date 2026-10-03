@@ -108,10 +108,11 @@ export const MessageItem = ({ message, onEdit, onDelete }: MessageItemProps) => 
           >
             {message.body}
           </Typography>
-          <p
-            className={`m-0 mt-1 flex items-center justify-end gap-1 text-xs ${status.meta}`}
-            aria-label={`${status.label} ${status.when}`}
-          >
+          <p className={`m-0 mt-1 flex items-center justify-end gap-1 text-xs ${status.meta}`}>
+            {/* Leitores de tela leem a frase completa; a versão visual compacta fica oculta para eles. */}
+            <span className="sr-only">
+              {status.label} {status.when}
+            </span>
             <span aria-hidden="true">
               {status.label} · {status.date}
             </span>

@@ -1,5 +1,5 @@
 /** E.164: "+" seguido de 8 a 15 dígitos, sem zero inicial (mesma regra do firestore.rules). */
-export const E164_PATTERN = /^\+[1-9]\d{7,14}$/;
+const E164_PATTERN = /^\+[1-9]\d{7,14}$/;
 
 const BRAZIL_CODE = '55';
 

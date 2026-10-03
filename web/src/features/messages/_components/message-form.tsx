@@ -18,7 +18,7 @@ import type { MessageInput } from '../types/message';
 import { toRecipients } from '../utils/recipients';
 import { RecipientPicker } from './recipient-picker';
 
-export type MessageFormMode = MessageFormValues['mode'];
+type MessageFormMode = MessageFormValues['mode'];
 
 type MessageFormProps = {
   contacts: readonly Contact[];

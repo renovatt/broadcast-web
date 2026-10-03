@@ -11,8 +11,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { useCurrentConnection } from '@/features/connections/hooks/use-connection';
-import { notify } from '@/shared/stores/notification-store';
 import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
+import { withFeedback } from '@/shared/utils/with-feedback';
 import { deleteContact } from '../api/contacts-api';
 import { ContactFormDialog } from '../_components/contact-form-dialog';
 import { ContactsTable } from '../_components/contacts-table';
@@ -42,14 +42,7 @@ export const ContactsPage = () => {
   const openCreate = () => setForm({ mode: 'create' });
 
   const confirmDelete = async () => {
-    if (!toDelete) return;
-    try {
-      await deleteContact(toDelete.id);
-      notify.success('Contato excluído.');
-    } catch (deleteError) {
-      notify.error(getFirestoreErrorMessage(deleteError));
-      throw deleteError;
-    }
+    if (toDelete) await withFeedback(() => deleteContact(toDelete.id), 'Contato excluído.');
   };
 
   const renderContent = () => {

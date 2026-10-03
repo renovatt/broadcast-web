@@ -8,10 +8,9 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import { RhfTextField } from '@/components/rhf/rhf-text-field';
 import { useCurrentUser } from '@/features/auth/hooks/use-auth';
-import { notify } from '@/shared/stores/notification-store';
-import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
 import { formatPhoneNational } from '@/shared/utils/phone';
 import { PHONE_MASK } from '@/shared/utils/phone-mask';
+import { withFeedback } from '@/shared/utils/with-feedback';
 import { createContact, updateContact } from '../api/contacts-api';
 import {
   createContactSchema,
@@ -53,12 +52,14 @@ export const ContactFormDialog = ({
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      if (contact) await updateContact(contact.id, values);
-      else await createContact(uid, connectionId, values);
-      notify.success(isEditing ? 'Contato atualizado.' : 'Contato adicionado.');
+      await withFeedback<unknown>(
+        () =>
+          contact ? updateContact(contact.id, values) : createContact(uid, connectionId, values),
+        isEditing ? 'Contato atualizado.' : 'Contato adicionado.',
+      );
       onClose();
-    } catch (error) {
-      notify.error(getFirestoreErrorMessage(error));
+    } catch {
+      // O toast de erro já foi exibido; o diálogo continua aberto com os valores digitados.
     }
   });
 

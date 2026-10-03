@@ -37,11 +37,20 @@ describe('AppLayout', () => {
     const { user, onSignOut } = renderLayout();
 
     await user.click(screen.getByRole('button', { name: 'Conta' }));
-    const menu = screen.getByRole('menu');
-    expect(within(menu).getByText('João Silva')).toBeInTheDocument();
-    expect(within(menu).getByText('joao@teste.com')).toBeInTheDocument();
+    // Nome e e-mail ficam fora do role="menu" (que só aceita itens de menu).
+    const menu = screen.getByRole('menu', { name: 'Conta' });
+    expect(within(menu).queryByText('João Silva')).not.toBeInTheDocument();
+    const popover = menu.closest<HTMLElement>('.MuiPopover-paper')!;
+    expect(within(popover).getByText('João Silva')).toBeInTheDocument();
+    expect(within(popover).getByText('joao@teste.com')).toBeInTheDocument();
 
     await user.click(within(menu).getByRole('menuitem', { name: 'Sair' }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('o foco vai direto para o item "Sair" ao abrir o menu (teclado)', async () => {
+    const { user } = renderLayout();
+    await user.click(screen.getByRole('button', { name: 'Conta' }));
+    expect(screen.getByRole('menuitem', { name: 'Sair' })).toHaveFocus();
   });
 });

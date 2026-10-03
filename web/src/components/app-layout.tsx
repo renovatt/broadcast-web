@@ -5,8 +5,9 @@ import Avatar from '@mui/material/Avatar';
 import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
-import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import MenuList from '@mui/material/MenuList';
+import Popover from '@mui/material/Popover';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import CampaignIcon from '@mui/icons-material/Campaign';
@@ -63,23 +64,26 @@ export const AppLayout = ({ user, homePath, onSignOut, children }: AppLayoutProp
               aria-haspopup="true"
               onClick={(event) => setMenuAnchor(event.currentTarget)}
             >
-              <Avatar className="size-8! bg-(--mui-palette-secondary-main)! text-sm!">
+              {/* Primária: o azul-céu secundário com texto branco não atinge o contraste AA (2.77:1). */}
+              <Avatar className="size-8! bg-(--mui-palette-primary-main)! text-sm!">
                 {initialsOf(user)}
               </Avatar>
             </IconButton>
           </div>
 
-          <Menu
+          {/* Popover + MenuList: os dados da conta ficam fora do role="menu", que só aceita itens. */}
+          <Popover
             id="account-menu"
             anchorEl={menuAnchor}
             open={Boolean(menuAnchor)}
             onClose={closeMenu}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            slotProps={{ paper: { className: 'mt-1 min-w-52' } }}
           >
             <div className="px-4 py-2">
               {user.displayName && (
-                <Typography variant="subtitle2" noWrap>
+                <Typography variant="subtitle2" component="p" noWrap>
                   {user.displayName}
                 </Typography>
               )}
@@ -88,18 +92,20 @@ export const AppLayout = ({ user, homePath, onSignOut, children }: AppLayoutProp
               </Typography>
             </div>
             <Divider />
-            <MenuItem
-              onClick={() => {
-                closeMenu();
-                onSignOut();
-              }}
-            >
-              <ListItemIcon>
-                <LogoutIcon fontSize="small" />
-              </ListItemIcon>
-              Sair
-            </MenuItem>
-          </Menu>
+            <MenuList autoFocusItem aria-label="Conta">
+              <MenuItem
+                onClick={() => {
+                  closeMenu();
+                  onSignOut();
+                }}
+              >
+                <ListItemIcon>
+                  <LogoutIcon fontSize="small" />
+                </ListItemIcon>
+                Sair
+              </MenuItem>
+            </MenuList>
+          </Popover>
         </Toolbar>
       </AppBar>
 

@@ -8,9 +8,8 @@ import SendIcon from '@mui/icons-material/Send';
 import { useCurrentUser } from '@/features/auth/hooks/use-auth';
 import type { Contact } from '@/features/contacts/types/contact';
 import { ROUTES } from '@/shared/constants/routes';
-import { notify } from '@/shared/stores/notification-store';
 import { formatDateTime } from '@/shared/utils/date';
-import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
+import { withFeedback } from '@/shared/utils/with-feedback';
 import { createMessage } from '../api/messages-api';
 import type { MessageInput } from '../types/message';
 import { MessageForm } from './message-form';
@@ -24,17 +23,12 @@ export const MessageComposer = ({ connectionId, contacts }: MessageComposerProps
   const { uid } = useCurrentUser();
 
   const send = async (input: MessageInput) => {
-    try {
-      await createMessage(uid, connectionId, input);
-      notify.success(
-        input.mode === 'now'
-          ? 'Mensagem enviada.'
-          : `Mensagem agendada para ${formatDateTime(input.scheduledAt)}.`,
-      );
-    } catch (error) {
-      notify.error(getFirestoreErrorMessage(error));
-      throw error;
-    }
+    await withFeedback(
+      () => createMessage(uid, connectionId, input),
+      input.mode === 'now'
+        ? 'Mensagem enviada.'
+        : `Mensagem agendada para ${formatDateTime(input.scheduledAt)}.`,
+    );
   };
 
   return (

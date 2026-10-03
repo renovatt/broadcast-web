@@ -44,8 +44,11 @@ describe('MessageItem', () => {
     const bubble = screen.getByText('Promoção de outubro').parentElement!;
 
     expect(bubble).toHaveClass('bg-emerald-50');
-    expect(within(bubble).getByLabelText('Enviada em 03/10/2026 10:12')).toHaveTextContent(
-      'Enviada · 03/10/2026 10:12',
+    // Frase completa para leitores de tela; versão compacta visível.
+    expect(within(bubble).getByText('Enviada em 03/10/2026 10:12')).toHaveClass('sr-only');
+    expect(within(bubble).getByText('Enviada · 03/10/2026 10:12')).toHaveAttribute(
+      'aria-hidden',
+      'true',
     );
     expect(within(bubble).getByTestId('DoneAllIcon')).toBeInTheDocument();
     expect(within(bubble).queryByTestId('ScheduleIcon')).not.toBeInTheDocument();
@@ -58,8 +61,10 @@ describe('MessageItem', () => {
     const bubble = screen.getByText('Lembrete da reunião').parentElement!;
 
     expect(bubble).toHaveClass('bg-amber-50');
-    expect(within(bubble).getByLabelText('Agendada para 05/10/2030 14:30')).toHaveTextContent(
-      'Agendada · 05/10/2030 14:30',
+    expect(within(bubble).getByText('Agendada para 05/10/2030 14:30')).toHaveClass('sr-only');
+    expect(within(bubble).getByText('Agendada · 05/10/2030 14:30')).toHaveAttribute(
+      'aria-hidden',
+      'true',
     );
     expect(within(bubble).getByTestId('ScheduleIcon')).toBeInTheDocument();
   });

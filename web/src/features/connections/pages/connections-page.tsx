@@ -7,8 +7,8 @@ import HubIcon from '@mui/icons-material/Hub';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
-import { notify } from '@/shared/stores/notification-store';
 import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
+import { withFeedback } from '@/shared/utils/with-feedback';
 import { deleteConnection } from '../api/connections-api';
 import { ConnectionCard } from '../_components/connection-card';
 import { ConnectionFormDialog } from '../_components/connection-form-dialog';
@@ -27,14 +27,7 @@ export const ConnectionsPage = () => {
   const openCreate = () => setForm({ mode: 'create' });
 
   const confirmDelete = async () => {
-    if (!toDelete) return;
-    try {
-      await deleteConnection(toDelete.id);
-      notify.success('Conexão excluída.');
-    } catch (deleteError) {
-      notify.error(getFirestoreErrorMessage(deleteError));
-      throw deleteError;
-    }
+    if (toDelete) await withFeedback(() => deleteConnection(toDelete.id), 'Conexão excluída.');
   };
 
   const renderContent = () => {

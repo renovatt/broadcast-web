@@ -1,7 +1,7 @@
 import { FieldValue, type Firestore, type Timestamp } from 'firebase-admin/firestore';
 
 /** Coleções que pertencem a uma conexão (ligadas por `connectionId`, sem subcoleções). */
-export const CHILD_COLLECTIONS = ['contacts', 'messages'] as const;
+const CHILD_COLLECTIONS = ['contacts', 'messages'] as const;
 
 type ChildCollection = (typeof CHILD_COLLECTIONS)[number];
 

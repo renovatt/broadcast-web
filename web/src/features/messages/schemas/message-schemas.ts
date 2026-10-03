@@ -4,7 +4,7 @@ import { z } from 'zod';
 /** Antecedência mínima de um agendamento (evita horários que viram passado antes de salvar). */
 export const MIN_SCHEDULE_AHEAD_MINUTES = 1;
 export const MAX_BODY_LENGTH = 1000;
-export const MAX_RECIPIENTS = 500;
+const MAX_RECIPIENTS = 500;
 
 const dayjsValue = z.custom<Dayjs | null>((value) => value === null || dayjs.isDayjs(value));
 

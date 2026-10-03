@@ -18,6 +18,8 @@ export const MessageStatusFilter = ({ value, counts, onChange }: MessageStatusFi
   <ToggleButtonGroup
     exclusive
     size="small"
+    // Fundo branco: sobre o fundo da página o texto cinza ficava abaixo de 4.5:1 de contraste.
+    className="bg-(--mui-palette-background-paper)"
     value={value}
     // Clicar no filtro já ativo devolve null: mantém o atual.
     onChange={(_, next: MessageFilter | null) => next && onChange(next)}

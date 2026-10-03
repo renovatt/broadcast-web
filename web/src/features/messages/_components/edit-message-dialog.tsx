@@ -6,9 +6,9 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import type { Contact } from '@/features/contacts/types/contact';
-import { notify } from '@/shared/stores/notification-store';
 import { formatDateTime } from '@/shared/utils/date';
 import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
+import { withFeedback } from '@/shared/utils/with-feedback';
 import { updateScheduledMessage } from '../api/messages-api';
 import type { Message, MessageInput } from '../types/message';
 import { MessageForm } from './message-form';
@@ -31,18 +31,14 @@ export const EditMessageDialog = ({ message, contacts, onClose }: EditMessageDia
   const removedCount = message.recipientIds.length - recipientIds.length;
 
   const save = async (input: MessageInput) => {
-    try {
-      await updateScheduledMessage(message.id, input);
-      notify.success(
-        input.mode === 'now'
-          ? 'Mensagem enviada.'
-          : `Agendamento atualizado para ${formatDateTime(input.scheduledAt)}.`,
-      );
-      onClose();
-    } catch (error) {
-      notify.error(saveErrorMessage(error));
-      throw error;
-    }
+    await withFeedback(
+      () => updateScheduledMessage(message.id, input),
+      input.mode === 'now'
+        ? 'Mensagem enviada.'
+        : `Agendamento atualizado para ${formatDateTime(input.scheduledAt)}.`,
+      saveErrorMessage,
+    );
+    onClose();
   };
 
   return (

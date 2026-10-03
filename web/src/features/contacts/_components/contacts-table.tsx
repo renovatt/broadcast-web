@@ -9,6 +9,7 @@ import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import { TruncatedText } from '@/components/truncated-text';
 import { formatPhone } from '@/shared/utils/phone';
 import type { Contact } from '../types/contact';
 
@@ -38,8 +39,13 @@ export const ContactsTable = ({ contacts, onEdit, onDelete }: ContactsTableProps
       <TableBody>
         {contacts.map((contact) => (
           <TableRow key={contact.id} hover>
-            <TableCell className="max-w-40 truncate sm:max-w-none" title={contact.name}>
-              {contact.name}
+            <TableCell className="max-w-40 sm:max-w-none">
+              <TruncatedText
+                variant="body2"
+                component="span"
+                className="block"
+                text={contact.name}
+              />
             </TableCell>
             <TableCell className="whitespace-nowrap tabular-nums">
               {formatPhone(contact.phone)}
