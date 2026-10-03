@@ -1,6 +1,7 @@
-import { setGlobalOptions } from 'firebase-functions/v2';
+import { setGlobalOptions } from 'firebase-functions';
 
+// Mesma região do Firestore (southamerica-east1): exigido pelos triggers do Firestore.
 setGlobalOptions({ region: 'southamerica-east1', maxInstances: 5 });
 
-// As functions são registradas aqui conforme as fases avançam:
-// - Fase 8: dispatchScheduledMessages (agendada) e onConnectionDeleted (cascata).
+export { dispatchScheduledMessages } from './messages/dispatch-scheduled-messages';
+export { onConnectionDisabled } from './connections/on-connection-disabled';

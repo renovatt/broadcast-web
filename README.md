@@ -42,7 +42,7 @@ Convenções (verificadas pelo ESLint com `eslint-plugin-check-file`):
 ### Git hooks (Husky)
 
 - **pre-commit**: ESLint `--fix` + Prettier nos arquivos staged (lint-staged), typecheck completo e testes de unidade.
-- **pre-push**: build de `/web` e `/functions` e testes das Security Rules.
+- **pre-push**: build de `/web` e `/functions`, testes das Security Rules e testes de integração das Cloud Functions.
 
 ## Pré-requisitos
 
@@ -53,15 +53,30 @@ Convenções (verificadas pelo ESLint com `eslint-plugin-check-file`):
 ## Rodando localmente
 
 ```bash
-npm run install:all                  # instala raiz, web e functions
-npm run setup:jdk                    # JDK portátil para os emuladores (uma vez)
-cp web/.env.example web/.env.local   # preencha com a config do app Web do Firebase
-
-npm run dev                          # frontend em http://localhost:5173
-npm run emulators                    # Auth, Firestore, Functions e Hosting locais (UI em http://localhost:4000)
+npm run install:all   # instala raiz, web e functions
+npm run setup:jdk     # JDK portátil para os emuladores (uma vez)
 ```
 
-Para usar o frontend contra os emuladores, defina `VITE_USE_EMULATORS=true` no `web/.env.local`.
+### Tudo local, com os emuladores (não precisa de projeto Firebase nem do plano Blaze)
+
+Em três terminais:
+
+```bash
+npm run emulators      # Auth, Firestore, Functions e Pub/Sub locais (UI em http://localhost:4000)
+npm run dev:emulator   # app em http://localhost:5173 conectado só aos emuladores (web/.env.emulator)
+npm run scheduler      # simula o Cloud Scheduler: executa o envio agendado a cada minuto
+```
+
+O emulador não executa funções agendadas sozinho; `npm run scheduler` chama a função a cada minuto
+(`node scripts/trigger-scheduler.mjs` executa uma vez). A cascata ao excluir uma conexão roda sozinha
+(trigger do Firestore). Os dados ficam só na memória dos emuladores.
+
+### Contra o projeto Firebase real
+
+```bash
+cp web/.env.example web/.env.local   # preencha com a config do app Web do Firebase
+npm run dev                          # frontend em http://localhost:5173
+```
 
 ## Autenticação
 
@@ -106,17 +121,38 @@ Como regras não funcionam como filtro, toda query do app inclui `where('tenantI
 Os cenários de acesso cruzado e de soft delete são cobertos por testes automatizados:
 `npm run test:rules`.
 
+## Cloud Functions (`/functions`)
+
+Região `southamerica-east1` (a mesma do Firestore). Toda a lógica fica em funções puras que recebem
+o `db` e são testadas contra o emulador; os gatilhos só as chamam.
+
+| Function                    | Gatilho                                        | O que faz                                                                                                                                    |
+| --------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dispatchScheduledMessages` | Cloud Scheduler, a cada minuto                 | Marca como `sent` (com `sentAt` do servidor) as mensagens `scheduled` e ativas cujo `scheduledAt` já passou. Funciona com o app fechado.     |
+| `onConnectionDisabled`      | Update em `connections/{id}` (ativa → inativa) | Cascata do soft delete: desativa os contatos e as mensagens da conexão com o mesmo `deletedAt`. Agendadas desativadas não são mais enviadas. |
+
+Garantias do envio agendado:
+
+- **idempotente**: só processa `status == scheduled`; executar de novo não reenvia;
+- **seguro contra concorrência**: cada escrita usa a precondição `lastUpdateTime` da leitura — se o
+  usuário editou ou excluiu a mensagem nesse meio-tempo, ela é ignorada e reavaliada no minuto seguinte;
+- **paginado** (lotes de 500) e com `BulkWriter`: uma falha isolada não derruba as demais;
+- precisão de até ~1 minuto (granularidade do Cloud Scheduler).
+
 ## Scripts (raiz)
 
-| Script               | Descrição                                            |
-| -------------------- | ---------------------------------------------------- |
-| `npm run dev`        | Vite dev server do `/web`                            |
-| `npm run emulators`  | Compila as functions e sobe os emuladores            |
-| `npm test`           | Testes de unidade do `/web`                          |
-| `npm run test:rules` | Testes das Security Rules no emulador do Firestore   |
-| `npm run setup:jdk`  | Baixa o JDK 21 portátil usado pelos emuladores       |
-| `npm run build`      | Build de `/web` e `/functions`                       |
-| `npm run lint`       | ESLint em `/web` e `/functions`                      |
-| `npm run typecheck`  | TypeScript em `/tests`, `/web` e `/functions`        |
-| `npm run format`     | Prettier                                             |
-| `npm run deploy`     | Deploy completo (rules, indexes, functions, hosting) |
+| Script                   | Descrição                                            |
+| ------------------------ | ---------------------------------------------------- |
+| `npm run dev`            | Vite dev server do `/web` (projeto Firebase real)    |
+| `npm run dev:emulator`   | Vite dev server do `/web` conectado aos emuladores   |
+| `npm run emulators`      | Compila as functions e sobe os emuladores            |
+| `npm test`               | Testes de unidade do `/web`                          |
+| `npm run test:rules`     | Testes das Security Rules no emulador do Firestore   |
+| `npm run test:functions` | Testes de integração das Cloud Functions (emulador)  |
+| `npm run scheduler`      | Simula o Cloud Scheduler local (envio a cada minuto) |
+| `npm run setup:jdk`      | Baixa o JDK 21 portátil usado pelos emuladores       |
+| `npm run build`          | Build de `/web` e `/functions`                       |
+| `npm run lint`           | ESLint em `/web` e `/functions`                      |
+| `npm run typecheck`      | TypeScript em `/tests`, `/web` e `/functions`        |
+| `npm run format`         | Prettier                                             |
+| `npm run deploy`         | Deploy completo (rules, indexes, functions, hosting) |

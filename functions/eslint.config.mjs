@@ -29,7 +29,10 @@ export default tseslint.config(
         { '**/*.ts': 'KEBAB_CASE' },
         { ignoreMiddleExtensions: true },
       ],
-      'check-file/folder-naming-convention': ['error', { 'src/**/': 'KEBAB_CASE' }],
+      'check-file/folder-naming-convention': [
+        'error',
+        { 'src/**/': '@(__tests__|+([a-z0-9])*(-+([a-z0-9])))' },
+      ],
     },
   },
 );
