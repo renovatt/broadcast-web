@@ -1,0 +1,4 @@
+/* Ordem das camadas: estilos do MUI (camada "mui") ficam abaixo das utilities do Tailwind,
+   permitindo sobrescrever componentes MUI com classes utilitárias. */
+@layer theme, base, mui, components, utilities;
+@import 'tailwindcss';

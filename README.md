@@ -1,39 +1,41 @@
-# Material UI - Vite example with Tailwind CSS in TypeScript
+# Broadcast
 
-## How to use
+Aplicação SaaS multi-tenant de envio (simulado) de mensagens em massa — React + TypeScript + Firebase.
 
-Download the example [or clone the repo](https://github.com/mui/material-ui):
+> Em construção. O plano completo está em [`PLANO-DE-EXECUCAO.md`](./PLANO-DE-EXECUCAO.md).
 
-<!-- #target-branch-reference -->
+## Estrutura
 
-```bash
-curl https://codeload.github.com/mui/material-ui/tar.gz/master | tar -xz --strip=2 material-ui-master/examples/material-ui-vite-tailwind-ts
-cd material-ui-vite-tailwind-ts
+```
+/web         Frontend — React 19, Vite, Material UI, Tailwind CSS
+/functions   Firebase Cloud Functions (v2, Node 24)
+firebase.json, firestore.rules, firestore.indexes.json
 ```
 
-Install it and run:
+## Pré-requisitos
+
+- Node.js 24
+- Java 21+ (apenas para os emuladores do Firestore)
+
+## Rodando localmente
 
 ```bash
-npm install
-npm run dev
+npm run install:all          # instala raiz, web e functions
+cp web/.env.example web/.env.local   # preencha com a config do app Web do Firebase
+
+npm run dev                  # frontend em http://localhost:5173
+npm run emulators            # Auth, Firestore, Functions e Hosting locais (UI em http://localhost:4000)
 ```
 
-or:
+Para usar o frontend contra os emuladores, defina `VITE_USE_EMULATORS=true` no `web/.env.local`.
 
-<!-- #target-branch-reference -->
+## Scripts (raiz)
 
-[![Edit on CodeSandbox](https://codesandbox.io/static/img/play-codesandbox.svg)](https://codesandbox.io/p/sandbox/github/mui/material-ui/tree/master/examples/material-ui-vite-tailwind-ts)
-
-[![Edit on StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/mui/material-ui/tree/master/examples/material-ui-vite-tailwind-ts)
-
-## The idea behind the example
-
-This example demonstrates how you can use [Tailwind CSS](https://tailwindcss.com/) and [Vite](https://github.com/vitejs/vite) together with Material UI.
-It includes `@mui/material` and its peer dependencies, including [Emotion](https://emotion.sh/docs/introduction), the default style engine in Material UI.
-
-## What's next?
-
-<!-- #host-reference -->
-
-You now have a working example project.
-You can head back to the documentation and continue by browsing the [templates](https://next.mui.com/material-ui/getting-started/templates/) section.
+| Script              | Descrição                                            |
+| ------------------- | ---------------------------------------------------- |
+| `npm run dev`       | Vite dev server do `/web`                            |
+| `npm run emulators` | Compila as functions e sobe os emuladores            |
+| `npm run build`     | Build de `/web` e `/functions`                       |
+| `npm run lint`      | ESLint em ambos                                      |
+| `npm run typecheck` | TypeScript em ambos                                  |
+| `npm run deploy`    | Deploy completo (rules, indexes, functions, hosting) |
