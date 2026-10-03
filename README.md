@@ -205,7 +205,7 @@ Convenções (verificadas pelo ESLint):
 
 | Suíte                     | Quantidade | Comando                  | O que cobre                                                          |
 | ------------------------- | ---------- | ------------------------ | -------------------------------------------------------------------- |
-| Unidade (`/web`)          | 292        | `npm test`               | Componentes, páginas, hooks, schemas, utilitários (Firebase mockado) |
+| Unidade (`/web`)          | 293        | `npm test`               | Componentes, páginas, hooks, schemas, utilitários (Firebase mockado) |
 | Security Rules (`/tests`) | 44         | `npm run test:rules`     | Isolamento entre clientes, validações, soft delete                   |
 | Integração (`/functions`) | 33         | `npm run test:functions` | Lógica das functions com o Admin SDK real no emulador                |
 

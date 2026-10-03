@@ -38,3 +38,21 @@ describe('RhfTextField com mask', () => {
     expect(screen.getByTestId('code-input')).toBe(screen.getByLabelText('Código'));
   });
 });
+
+describe('RhfTextField com mask — desmontagem', () => {
+  it('desmontar com o campo focado encerra o loop de timers da máscara (sem vazamento)', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<TestForm onSubmit={vi.fn()} />);
+    await user.type(screen.getByLabelText('Código'), '123');
+    expect(screen.getByLabelText('Código')).toHaveFocus();
+
+    // Enquanto focado, a biblioteca agenda setTimeout(…) sem atraso continuamente.
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    unmount();
+    setTimeoutSpy.mockClear();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const zeroDelayCalls = setTimeoutSpy.mock.calls.filter(([, delay]) => !delay);
+    expect(zeroDelayCalls).toHaveLength(0);
+  });
+});

@@ -20,11 +20,11 @@ env:
 jobs:
   quality:
     name: Lint, tipos, testes de unidade e build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -56,11 +56,11 @@ jobs:
 
   emulator-tests:
     name: Security Rules e Cloud Functions (emulador)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -69,13 +69,13 @@ jobs:
             functions/package-lock.json
 
       # Java 21 exigido pelo emulador do Firestore (o JDK portátil de scripts/ não é usado aqui).
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
 
       - name: Cache dos emuladores do Firebase
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ hashFiles('package-lock.json') }}
