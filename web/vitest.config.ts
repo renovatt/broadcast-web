@@ -22,6 +22,8 @@ export default mergeConfig(
         VITE_FIREBASE_MESSAGING_SENDER_ID: '000000000000',
         VITE_FIREBASE_APP_ID: '1:000000000000:web:test',
         VITE_USE_EMULATORS: 'false',
+        // Fixo para não herdar o modo Spark do .env local; testes do modo sem functions usam vi.stubEnv.
+        VITE_FUNCTIONS_ENABLED: 'true',
       },
     },
   }),

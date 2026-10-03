@@ -6,6 +6,10 @@ Aplicação SaaS **multi-tenant** de envio de mensagens em massa (envio simulado
 **React + TypeScript + Firebase** (Authentication, Firestore, Cloud Functions e Hosting).
 
 > 🔗 **App publicado:** _link adicionado após o deploy_
+>
+> ℹ️ A versão publicada está no plano gratuito do Firebase (Spark), que não permite Cloud Functions.
+> Elas rodam 100% no emulador e são cobertas por testes de integração no CI — veja
+> [App publicado no plano gratuito](#app-publicado-no-plano-gratuito-spark).
 
 Cada usuário cadastrado é um **cliente**. O cliente gerencia suas **conexões**; cada conexão tem
 seus **contatos** e suas **mensagens**. Mensagens podem ser enviadas na hora ou **agendadas** — no
@@ -212,7 +216,7 @@ Convenções (verificadas pelo ESLint):
 
 | Suíte                     | Quantidade | Comando                  | O que cobre                                                          |
 | ------------------------- | ---------- | ------------------------ | -------------------------------------------------------------------- |
-| Unidade (`/web`)          | 293        | `npm test`               | Componentes, páginas, hooks, schemas, utilitários (Firebase mockado) |
+| Unidade (`/web`)          | 300        | `npm test`               | Componentes, páginas, hooks, schemas, utilitários (Firebase mockado) |
 | Security Rules (`/tests`) | 44         | `npm run test:rules`     | Isolamento entre clientes, validações, soft delete                   |
 | Integração (`/functions`) | 33         | `npm run test:functions` | Lógica das functions com o Admin SDK real no emulador                |
 
@@ -257,14 +261,40 @@ npm run dev
 
 ## Deploy
 
-Requer o plano **Blaze** (Cloud Functions e Cloud Scheduler). Com o projeto configurado em `.firebaserc`:
+Com o projeto configurado em `.firebaserc`:
 
 ```bash
 npx firebase login
-npm run deploy          # build + rules + índices + functions + hosting
+npm run deploy             # build do /web + rules + índices + hosting (funciona no plano Spark)
+npm run deploy:functions   # Cloud Functions + Cloud Scheduler (exige o plano Blaze)
 ```
 
 Os índices compostos levam alguns minutos para ficar ativos após o primeiro deploy.
+
+### App publicado no plano gratuito (Spark)
+
+A versão publicada roda no plano **Spark**, que não permite Cloud Functions. Todo o resto
+(autenticação, CRUDs, envio imediato, tempo real, rules e isolamento) funciona igual. Sem as
+functions:
+
+- mensagens **agendadas permanecem como Agendadas** — a página de broadcast avisa isso;
+- o **resumo** dos cards de conexão não é calculado e fica oculto;
+- excluir uma conexão não desativa seus contatos e mensagens em cascata (eles ficam inacessíveis
+  pela interface, já que a conexão some).
+
+O build de produção usa `VITE_FUNCTIONS_ENABLED=false` em `web/.env` para ativar esse modo.
+
+**As Cloud Functions estão completas e rodam 100% no Firebase Emulator Suite** — agendamento
+(`dispatchScheduledMessages`), cascata (`onConnectionDisabled`) e resumo das conexões
+(`onContactWritten` / `onMessageWritten`). A limitação é só de plano de cobrança, não de código:
+
+- **Na prática**: com os emuladores ([Rodando localmente](#rodando-localmente)), mensagens
+  agendadas viram Enviadas no horário, mesmo com o app fechado, e o resumo e a cascata funcionam.
+- **Testes de integração**: 33 testes (`npm run test:functions`) executam a lógica das functions
+  com o Admin SDK real contra o emulador do Firestore — envio no horário, idempotência, paginação,
+  cascata e contagem do resumo.
+- **CI**: esses testes rodam a cada push no GitHub Actions (job _Security Rules e Cloud Functions_),
+  junto com os 44 testes das Security Rules.
 
 ## Decisões técnicas
 
@@ -283,18 +313,19 @@ Os índices compostos levam alguns minutos para ficar ativos após o primeiro de
 
 ## Scripts
 
-| Script                   | Descrição                                             |
-| ------------------------ | ----------------------------------------------------- |
-| `npm run dev`            | App contra o projeto Firebase real                    |
-| `npm run dev:emulator`   | App contra os emuladores                              |
-| `npm run emulators`      | Compila as functions e sobe os emuladores             |
-| `npm run scheduler`      | Simula o Cloud Scheduler local (envio a cada minuto)  |
-| `npm test`               | Testes de unidade do `/web`                           |
-| `npm run test:rules`     | Testes das Security Rules                             |
-| `npm run test:functions` | Testes de integração das Cloud Functions              |
-| `npm run build`          | Build de `/web` e `/functions`                        |
-| `npm run lint`           | ESLint em `/web` e `/functions`                       |
-| `npm run typecheck`      | TypeScript em `/tests`, `/web` e `/functions`         |
-| `npm run format`         | Prettier                                              |
-| `npm run setup:jdk`      | Baixa o JDK 21 portátil usado pelos emuladores        |
-| `npm run deploy`         | Deploy completo (rules, índices, functions e hosting) |
+| Script                     | Descrição                                            |
+| -------------------------- | ---------------------------------------------------- |
+| `npm run dev`              | App contra o projeto Firebase real                   |
+| `npm run dev:emulator`     | App contra os emuladores                             |
+| `npm run emulators`        | Compila as functions e sobe os emuladores            |
+| `npm run scheduler`        | Simula o Cloud Scheduler local (envio a cada minuto) |
+| `npm test`                 | Testes de unidade do `/web`                          |
+| `npm run test:rules`       | Testes das Security Rules                            |
+| `npm run test:functions`   | Testes de integração das Cloud Functions             |
+| `npm run build`            | Build de `/web` e `/functions`                       |
+| `npm run deploy`           | Publica hosting, rules e índices (plano Spark)       |
+| `npm run deploy:functions` | Publica as Cloud Functions (plano Blaze)             |
+| `npm run lint`             | ESLint em `/web` e `/functions`                      |
+| `npm run typecheck`        | TypeScript em `/tests`, `/web` e `/functions`        |
+| `npm run format`           | Prettier                                             |
+| `npm run setup:jdk`        | Baixa o JDK 21 portátil usado pelos emuladores       |

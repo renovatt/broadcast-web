@@ -28,6 +28,7 @@ const mockMessages = (messages: Message[]) =>
   vi.mocked(useMessages).mockReturnValue(state(messages));
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   useAuthStore.getState().setUser({ uid: 'u1', email: 'a@a.com', displayName: 'A' });
   useNotificationStore.getState().dismiss();
   vi.mocked(useContacts).mockReturnValue(state(contacts));
@@ -106,6 +107,19 @@ describe('BroadcastPage', () => {
     await user.click(within(sent).getByRole('button', { name: 'Excluir mensagem' }));
     expect(screen.getByRole('dialog', { name: 'Excluir mensagem?' })).toHaveTextContent(
       'A mensagem sairá do histórico desta conexão.',
+    );
+  });
+
+  it('sem aviso de plano gratuito quando as Cloud Functions estão publicadas', () => {
+    renderWithProviders(<BroadcastPage />);
+    expect(screen.queryByText(/plano gratuito/)).not.toBeInTheDocument();
+  });
+
+  it('avisa que o agendamento não é processado sem as Cloud Functions', () => {
+    vi.stubEnv('VITE_FUNCTIONS_ENABLED', 'false');
+    renderWithProviders(<BroadcastPage />);
+    expect(screen.getByText(/plano gratuito/)).toHaveTextContent(
+      'mensagens agendadas permanecem como Agendadas',
     );
   });
 });

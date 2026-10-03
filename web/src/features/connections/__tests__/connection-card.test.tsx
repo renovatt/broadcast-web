@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '@test-utils/render';
 import { ConnectionCard } from '../_components/connection-card';
@@ -84,5 +84,30 @@ describe('ConnectionCard — resumo', () => {
   it('sem stats (conexão nova) mostra tudo zerado', () => {
     renderCard();
     expect(summary()).toHaveTextContent('0 contatos0 enviadas0 agendadas');
+  });
+
+  describe('sem Cloud Functions (plano Spark)', () => {
+    beforeEach(() => {
+      vi.stubEnv('VITE_FUNCTIONS_ENABLED', 'false');
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('esconde o resumo, que nunca seria calculado', () => {
+      renderCard();
+      expect(screen.queryByRole('list', { name: 'Resumo da conexão' })).not.toBeInTheDocument();
+    });
+
+    it('mantém o resumo se ele já existir no documento', () => {
+      renderWithProviders(
+        <ConnectionCard
+          connection={{ ...connection, stats: { contacts: 2, sent: 0, scheduled: 0 } }}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+      );
+      expect(summary()).toHaveTextContent('2 contatos');
+    });
   });
 });

@@ -15,6 +15,7 @@ import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import { TruncatedText } from '@/components/truncated-text';
 import { ROUTES } from '@/shared/constants/routes';
+import { areFunctionsEnabled } from '@/shared/utils/backend';
 import { formatDate } from '@/shared/utils/date';
 import type { Connection, ConnectionStats } from '../types/connection';
 
@@ -44,6 +45,8 @@ const Stat = ({ icon, label, className }: StatProps) => (
 
 export const ConnectionCard = ({ connection, onEdit, onDelete }: ConnectionCardProps) => {
   const stats = connection.stats ?? EMPTY_STATS;
+  // Sem as Cloud Functions (plano Spark) o resumo nunca é calculado: zeros seriam enganosos.
+  const showStats = Boolean(connection.stats) || areFunctionsEnabled();
 
   return (
     <Card component="article" aria-label={connection.name} className="flex h-full flex-col">
@@ -76,23 +79,25 @@ export const ConnectionCard = ({ connection, onEdit, onDelete }: ConnectionCardP
         </div>
 
         {/* Resumo em tempo real (mantido pela Cloud Function onContactWritten/onMessageWritten). */}
-        <ul aria-label="Resumo da conexão" className="m-0 flex list-none flex-wrap gap-2 p-0">
-          <Stat
-            icon={<PeopleOutlinedIcon />}
-            label={plural(stats.contacts, 'contato', 'contatos')}
-            className="bg-indigo-50 text-indigo-800"
-          />
-          <Stat
-            icon={<DoneAllIcon />}
-            label={plural(stats.sent, 'enviada', 'enviadas')}
-            className="bg-emerald-50 text-emerald-800"
-          />
-          <Stat
-            icon={<ScheduleIcon />}
-            label={plural(stats.scheduled, 'agendada', 'agendadas')}
-            className="bg-amber-50 text-amber-800"
-          />
-        </ul>
+        {showStats && (
+          <ul aria-label="Resumo da conexão" className="m-0 flex list-none flex-wrap gap-2 p-0">
+            <Stat
+              icon={<PeopleOutlinedIcon />}
+              label={plural(stats.contacts, 'contato', 'contatos')}
+              className="bg-indigo-50 text-indigo-800"
+            />
+            <Stat
+              icon={<DoneAllIcon />}
+              label={plural(stats.sent, 'enviada', 'enviadas')}
+              className="bg-emerald-50 text-emerald-800"
+            />
+            <Stat
+              icon={<ScheduleIcon />}
+              label={plural(stats.scheduled, 'agendada', 'agendadas')}
+              className="bg-amber-50 text-amber-800"
+            />
+          </ul>
+        )}
       </CardContent>
       <CardActions className="border-t border-gray-100 px-4!">
         <Button

@@ -5,6 +5,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useCurrentConnection } from '@/features/connections/hooks/use-connection';
 import { useContacts } from '@/features/contacts/hooks/use-contacts';
 import { notify } from '@/shared/stores/notification-store';
+import { areFunctionsEnabled } from '@/shared/utils/backend';
 import { getFirestoreErrorMessage } from '@/shared/utils/firestore';
 import { withFeedback } from '@/shared/utils/with-feedback';
 import { deleteMessage } from '../api/messages-api';
@@ -49,6 +50,14 @@ export const BroadcastPage = () => {
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-5">
+      {!areFunctionsEnabled() && (
+        <Alert severity="info" className="lg:col-span-5">
+          Ambiente de demonstração no plano gratuito do Firebase: as Cloud Functions não estão
+          publicadas, então mensagens agendadas permanecem como <strong>Agendadas</strong>. O envio
+          imediato funciona normalmente.
+        </Alert>
+      )}
+
       <div className="min-w-0 lg:sticky lg:top-24 lg:col-span-2">{renderComposer()}</div>
 
       <div className="min-w-0 lg:col-span-3">

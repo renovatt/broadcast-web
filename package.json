@@ -19,7 +19,8 @@
     "typecheck": "tsc -p tests && npm --prefix web run typecheck && npm --prefix functions run typecheck",
     "format": "prettier --write web functions tests scripts README.md firebase.json firestore.indexes.json package.json lint-staged.config.mjs vitest.config.ts .github",
     "format:check": "prettier --check web functions tests scripts README.md firebase.json firestore.indexes.json package.json lint-staged.config.mjs vitest.config.ts .github",
-    "deploy": "firebase deploy"
+    "deploy": "firebase deploy --only hosting,firestore",
+    "deploy:functions": "firebase deploy --only functions"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.2",
