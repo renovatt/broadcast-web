@@ -6,9 +6,9 @@ export const theme = createTheme(
   {
     cssVariables: true,
     palette: {
-      primary: { main: '#1565c0' },
-      secondary: { main: '#00897b' },
-      background: { default: '#f5f7fa' },
+      primary: { main: '#4F46E5' },
+      secondary: { main: '#0EA5E9' },
+      background: { default: '#F5F7FB' },
     },
     shape: { borderRadius: 10 },
     typography: {
