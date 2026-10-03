@@ -5,7 +5,7 @@
 Aplicação SaaS **multi-tenant** de envio de mensagens em massa (envio simulado), feita com
 **React + TypeScript + Firebase** (Authentication, Firestore, Cloud Functions e Hosting).
 
-> 🔗 **App publicado:** _link adicionado após o deploy_
+> 🔗 **App publicado:** [broadcast-web-db939.web.app](https://broadcast-web-db939.web.app)
 >
 > ℹ️ A versão publicada está no plano gratuito do Firebase (Spark), que não permite Cloud Functions.
 > Elas rodam 100% no emulador e são cobertas por testes de integração no CI — veja
