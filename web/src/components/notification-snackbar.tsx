@@ -13,7 +13,9 @@ export const NotificationSnackbar = () => {
       open={Boolean(notification)}
       autoHideDuration={4000}
       onClose={(_, reason) => reason !== 'clickaway' && dismiss()}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      // Abaixo da barra superior (sticky, 64px) para não cobri-la.
+      className="top-20!"
     >
       {notification ? (
         <Alert

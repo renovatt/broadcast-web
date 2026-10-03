@@ -23,6 +23,14 @@ describe('NotificationSnackbar', () => {
     expect(alert.className).toMatch(/Error/);
   });
 
+  it('aparece no canto superior direito', () => {
+    render(<NotificationSnackbar />);
+    act(() => notify.info('Oi'));
+    expect(screen.getByRole('alert').closest('.MuiSnackbar-root')).toHaveClass(
+      'MuiSnackbar-anchorOriginTopRight',
+    );
+  });
+
   it('fecha pelo botão e limpa o store', async () => {
     const user = userEvent.setup();
     render(<NotificationSnackbar />);
