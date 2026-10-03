@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Um novo push na mesma branch cancela a execução anterior ainda em andamento.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Os hooks do Husky são para máquinas de desenvolvimento, não para o CI.
+  HUSKY: 0
+
+jobs:
+  quality:
+    name: Lint, tipos, testes de unidade e build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+            functions/package-lock.json
+
+      - name: Instalar dependências
+        run: |
+          npm ci
+          npm --prefix web ci
+          npm --prefix functions ci
+
+      - name: Formatação (Prettier)
+        run: npm run format:check
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Tipos (TypeScript)
+        run: npm run typecheck
+
+      - name: Testes de unidade (web)
+        run: npm test
+
+      - name: Build (web + functions)
+        run: npm run build
+
+  emulator-tests:
+    name: Security Rules e Cloud Functions (emulador)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      # Java 21 exigido pelo emulador do Firestore (o JDK portátil de scripts/ não é usado aqui).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Cache dos emuladores do Firebase
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('package-lock.json') }}
+
+      - name: Instalar dependências
+        run: |
+          npm ci
+          npm --prefix functions ci
+
+      - name: Testes das Security Rules
+        run: npm run test:rules
+
+      - name: Testes de integração das Cloud Functions
+        run: npm run test:functions

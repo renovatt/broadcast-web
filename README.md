@@ -1,5 +1,7 @@
 # Broadcast
 
+[![CI](https://github.com/renovatt/broadcast-web/actions/workflows/ci.yml/badge.svg)](https://github.com/renovatt/broadcast-web/actions/workflows/ci.yml)
+
 Aplicação SaaS **multi-tenant** de envio de mensagens em massa (envio simulado), feita com
 **React + TypeScript + Firebase** (Authentication, Firestore, Cloud Functions e Hosting).
 
@@ -208,8 +210,11 @@ Convenções (verificadas pelo ESLint):
 | Integração (`/functions`) | 33         | `npm run test:functions` | Lógica das functions com o Admin SDK real no emulador                |
 
 - Os testes de rules e de functions rodam contra os **emuladores** e têm trava: nunca tocam no projeto real.
-- **Husky**: o _pre-commit_ roda ESLint + Prettier nos arquivos alterados, typecheck e testes de
-  unidade; o _pre-push_ roda o build e os testes de rules e de functions.
+- **CI (GitHub Actions)** — [`.github/workflows/ci.yml`](./.github/workflows/ci.yml), a cada push e
+  pull request, em dois jobs paralelos: (1) formatação, lint, tipos, testes de unidade e build;
+  (2) testes das Security Rules e das Cloud Functions no emulador.
+- **Husky** (local): o _pre-commit_ roda ESLint + Prettier nos arquivos alterados, typecheck e testes
+  de unidade; o _pre-push_ roda o build.
 - Os fluxos completos (incluindo envio agendado com o app fechado, cascata e isolamento entre dois
   usuários) também foram validados no navegador contra os emuladores.
 
