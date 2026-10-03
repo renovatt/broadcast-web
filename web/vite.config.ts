@@ -15,6 +15,8 @@ export default defineConfig({
         // Bibliotecas em chunks próprios: mudam pouco e ficam em cache entre deploys do app.
         codeSplitting: {
           groups: [
+            { name: 'firebase-firestore', test: /node_modules[\\/]@firebase[\\/]firestore[\\/]/ },
+            { name: 'firebase-auth', test: /node_modules[\\/]@firebase[\\/]auth[\\/]/ },
             { name: 'firebase', test: /node_modules[\\/](@firebase|firebase)[\\/]/ },
             { name: 'mui', test: /node_modules[\\/](@mui|@emotion)[\\/]/ },
             { name: 'vendor', test: /node_modules[\\/]/ },
